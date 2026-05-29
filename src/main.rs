@@ -102,6 +102,11 @@ use mcp795xx::{DateTimeAccess, Mcp795xx};
 mod production_data;
 use production_data::ProductionData;
 
+mod wallet;
+mod comm;
+mod stealth;
+mod crypto_rng;
+
 // Include the generated-file as a separate module
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));

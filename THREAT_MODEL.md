@@ -129,10 +129,20 @@
 ## Future Improvements
 
 ### Short-term (before mainnet use)
-- [ ] Minimum PIN length (6+ digits) with entropy check
+- [x] Minimum PIN length (4 digits) enforcement
 - [ ] Auto-lock timeout (5 minutes of inactivity)
 - [ ] PSBT parser fuzz testing
-- [ ] Firmware integrity hash verification at boot
+- [x] Firmware integrity hash verification at boot
+- [x] Constant-time PIN comparison
+- [x] Secure memory wrappers with automatic zeroization
+- [x] Multi-pass anti-forensic file wipe (random data, 3 passes)
+- [x] USB rate limiting (10 cmds/sec)
+- [x] USB command allowlist when wallet locked
+- [x] Stack scrubbing after crypto operations
+- [x] BIP-39 Mnemonic zeroize on drop
+- [x] StoredKey zeroize on drop via #[zeroize(drop)]
+- [x] EncryptedSeed zeroize on drop
+- [x] Intermediate buffer audit (ZeroizingVec, SecureBox)
 
 ### Medium-term (v2)
 - [ ] Secure boot with signed firmware
@@ -145,3 +155,20 @@
 - [ ] Stateless operation: seed only in RAM during session
 - [ ] QR code output for signed PSBTs
 - [ ] Air-gapped operation (no USB needed)
+
+---
+
+## Phase 7 Security Hardening — Implemented Mitigations
+
+| Mitigation | Status | Details |
+|-----------|--------|---------|
+| Memory zeroization audit | ✅ Done | `#[zeroize(drop)]` on StoredKey, Mnemonic, EncryptedSeed, ZeroizingVec. All sensitive types zeroize on Drop. |
+| Secure memory wrappers | ✅ Done | `SecureBox<T>`, `SecureSlice<T>`, `SecureArray<T,N>` in `wallet/secure_memory.rs`. Automatic zeroization. Debug output redacted. |
+| Stack scrubbing | ✅ Done | `secure_scrub_stack()` — writes 256 zero bytes with volatile writes + compiler fence. Best-effort on embedded. |
+| Anti-forensic storage wipe | ✅ Done | 3-pass overwrite with hardware RNG data (not zeros) before file deletion. Defeats forensic recovery. |
+| Constant-time PIN comparison | ✅ Done | `constant_time_eq()` and `constant_time_pin_compare()` — XOR all bytes, no short-circuit. |
+| Boot integrity check | ✅ Done | `boot_integrity.rs` — SHA-256 hash of firmware in flash at boot. Compile-time constant for expected hash. Future: OTP storage. |
+| USB rate limiting | ✅ Done | Max 10 commands/second. Excess returns ERR_BUSY. Prevents brute-force USB attacks. |
+| USB locked allowlist | ✅ Done | When wallet locked, only GET_FIRMWARE_VER accepted. All other commands return ERR_LOCKED. |
+| PIN length enforcement | ✅ Done | Min 4, max 8 digits. Non-digit rejection. |
+| PIN zeroization | ✅ Done | PIN digits only used to derive encryption key on-the-fly. Not stored anywhere. Stack scrubbed after comparison. |

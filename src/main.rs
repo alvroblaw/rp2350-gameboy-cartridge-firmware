@@ -272,7 +272,6 @@ async fn main(spawner: Spawner) {
             boot_integrity::IntegrityStatus::Invalid => {
                 defmt::error!("Firmware integrity: FAILED — wallet mode disabled");
                 // Fall back to normal mode — refuse to enter wallet
-                // The cartridge still works as a flashcart.
             }
             boot_integrity::IntegrityStatus::NotConfigured => {
                 defmt::warn!("Firmware integrity: not configured (first boot)");

@@ -92,7 +92,7 @@ impl WalletState {
     pub fn generate_seed(
         &mut self,
         pin: &str,
-    ) -> Result<&[u16; 24], WalletError> {
+    ) -> Result<heapless::Vec<u16, 24>, WalletError> {
         if self.status != WalletStatus::NoSeed {
             return Err(WalletError::AlreadyInitialized);
         }
@@ -101,7 +101,7 @@ impl WalletState {
         self.pin_entry.validate_pin(pin)?;
 
         // Generate entropy and create mnemonic
-        let mnemonic = Mnemonic::generate(crate::wallet::bip39::WordCount::W24)?;
+        let mnemonic = Mnemonic::generate(crate::wallet::bip39::WordCount::Words24)?;
 
         // Derive seed from mnemonic
         let seed = mnemonic.to_seed();
@@ -126,7 +126,7 @@ impl WalletState {
         // This requires passing the VolumeManager reference, which is
         // handled at a higher level.
 
-        Ok(mnemonic.word_indices())
+        Ok(mnemonic.to_word_indices())
     }
 
     /// Unlock the wallet with a PIN.
@@ -233,14 +233,14 @@ impl From<crate::wallet::encrypt::PinError> for WalletError {
     }
 }
 
-impl From<crate::wallet::bip39::MnemonicError> for WalletError {
-    fn from(_: crate::wallet::bip39::MnemonicError) -> Self {
+impl From<crate::wallet::bip39::Bip39Error> for WalletError {
+    fn from(_: crate::wallet::bip39::Bip39Error) -> Self {
         WalletError::KeyDerivation
     }
 }
 
-impl From<crate::wallet::bip32::DerivationError> for WalletError {
-    fn from(_: crate::wallet::bip32::DerivationError) -> Self {
+impl From<crate::wallet::bip32::Bip32Error> for WalletError {
+    fn from(_: crate::wallet::bip32::Bip32Error) -> Self {
         WalletError::KeyDerivation
     }
 }

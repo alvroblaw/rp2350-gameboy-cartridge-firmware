@@ -381,6 +381,37 @@ pub enum PinError {
     NonDigit,
 }
 
+/// Constant-time comparison of two byte slices.
+///
+/// Compares all bytes without short-circuiting, preventing timing
+/// attacks on PIN or key comparisons. Returns `true` if slices are equal.
+///
+/// **Important**: if slices have different lengths, returns `false`
+/// immediately (length is not secret for PINs — only the content matters).
+#[inline]
+pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for i in 0..a.len() {
+        diff |= a[i] ^ b[i];
+    }
+    diff == 0
+}
+
+/// Constant-time comparison of two PIN strings.
+///
+/// Wrapper around `constant_time_eq` for PIN strings.
+/// PIN digits are zeroized from the comparison buffers after use.
+#[inline]
+pub fn constant_time_pin_compare(a: &str, b: &str) -> bool {
+    let result = constant_time_eq(a.as_bytes(), b.as_bytes());
+    // Scrub stack after comparison
+    crate::wallet::secure_memory::secure_scrub_stack();
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

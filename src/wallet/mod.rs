@@ -20,6 +20,7 @@ pub mod bip39;
 pub mod encrypt;
 pub mod keys;
 pub mod psbt;
+pub mod state;
 pub mod storage;
 
 // Re-export key types for convenience
@@ -28,4 +29,5 @@ pub use bip32::{ExtendedPrivateKey, ExtendedPublicKey, Network};
 pub use bip39::{Mnemonic, WordCount};
 pub use encrypt::{EncryptedSeed, PinEntry, PinRateLimiter, ZeroizingVec};
 pub use keys::{KeySource, StoredKey, KeyError};
+pub use state::{WalletState, WalletStatus, WalletError};
 pub use storage::SeedStorage;

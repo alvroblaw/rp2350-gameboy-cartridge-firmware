@@ -105,6 +105,7 @@ use production_data::ProductionData;
 mod wallet;
 mod comm;
 mod stealth;
+use stealth::{BootMode, detect_boot_mode, run_stealth_mode};
 mod crypto_rng;
 
 // Include the generated-file as a separate module
@@ -254,6 +255,13 @@ async fn main(spawner: Spawner) {
     );
     info!("running at {} hz", sys_freq);
 
+    // --- Stealth mode detection ---
+    // Check physical button (PIN_4) BEFORE any GB bus activity.
+    // Uses raw SIO + pad registers — does NOT claim the pin.
+    // Button is active LOW with pull-up. Hold for 2s to enter wallet mode.
+    let boot_mode = detect_boot_mode().await;
+    defmt::info!("Boot mode: {:?}", boot_mode);
+
     let mut reset_pin = Output::new(p.PIN_45, Level::High);
     let mut _gb_bus_en = Output::new(p.PIN_44, Level::High);
 
@@ -282,6 +290,15 @@ async fn main(spawner: Spawner) {
     } = Pio::new(p.PIO2, Irqs);
 
     let ws2812 = WS2812.init(Ws2812Spi::new(p.SPI1, p.PIN_47));
+
+    // --- Branch: stealth vs normal mode ---
+    if boot_mode == BootMode::Stealth {
+        // Stealth mode: LED green, wait for USB wallet commands.
+        // This branch diverges (-> !), so normal mode code below is unaffected.
+        run_stealth_mode(ws2812).await;
+    }
+
+    // --- Normal flashcart mode continues below ---
 
     // Create the driver, from the HAL.
     let driver = Driver::new(p.USB, Irqs);

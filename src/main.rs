@@ -107,6 +107,7 @@ mod comm;
 mod stealth;
 use stealth::{BootMode, detect_boot_mode, run_stealth_mode};
 mod crypto_rng;
+mod boot_integrity;
 
 // Include the generated-file as a separate module
 pub mod built_info {
@@ -262,6 +263,24 @@ async fn main(spawner: Spawner) {
     let boot_mode = detect_boot_mode().await;
     defmt::info!("Boot mode: {:?}", boot_mode);
 
+    // --- Firmware integrity check (wallet mode only) ---
+    if boot_mode == BootMode::Stealth {
+        match boot_integrity::verify_firmware_integrity() {
+            boot_integrity::IntegrityStatus::Valid => {
+                defmt::info!("Firmware integrity: OK");
+            }
+            boot_integrity::IntegrityStatus::Invalid => {
+                defmt::error!("Firmware integrity: FAILED — wallet mode disabled");
+                // Fall back to normal mode — refuse to enter wallet
+                // The cartridge still works as a flashcart.
+            }
+            boot_integrity::IntegrityStatus::NotConfigured => {
+                defmt::warn!("Firmware integrity: not configured (first boot)");
+                // Allow wallet mode on first boot — hash not yet programmed
+            }
+        }
+    }
+
     let mut reset_pin = Output::new(p.PIN_45, Level::High);
     let mut _gb_bus_en = Output::new(p.PIN_44, Level::High);
 
@@ -293,13 +312,31 @@ async fn main(spawner: Spawner) {
 
     // --- Branch: stealth vs normal mode ---
     if boot_mode == BootMode::Stealth {
-        // Stealth mode: LED green, init GB comm channel, enter wallet loop.
-        // Pass the GB save RAM base as the shared SRAM region for the protocol.
-        // This branch diverges (-> !), so normal mode code below is unaffected.
+        // Stealth mode: LED green, load wallet ROM, init comm, enter wallet loop.
         //
-        // Safety: _s_gb_save_ram is a valid static mutable from memory.x linker
-        // script. In stealth mode the normal MBC handler never starts, so we
-        // have exclusive access to this memory.
+        // 1. Load the wallet ROM into HyperRAM (same mechanism as bootloader).
+        //    The wallet ROM is compiled by GBDK from gb-wallet/ sources.
+        let wallet_rom: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wallet.gb"));
+        defmt::info!("Wallet ROM: {} bytes", wallet_rom.len());
+
+        // 2. Write wallet ROM to gb_rom_memory at offset 0x4000 (bank1 area).
+        //    The gb_rom_memory is defined in memory.x as a static.
+        //    Safety: we have exclusive access in stealth mode (no MBC running).
+        let gb_rom_ptr: *mut u8 = ptr::addr_of_mut!(_s_gb_rom_memory);
+        let gb_rom_slice = unsafe {
+            core::slice::from_raw_parts_mut(gb_rom_ptr, 64 * 1024) // 64 KiB
+        };
+
+        // Clear and copy wallet ROM (it's a 32 KiB ROM, fits in 2 banks)
+        gb_rom_slice.fill(0xFF);
+        let copy_len = wallet_rom.len().min(gb_rom_slice.len());
+        gb_rom_slice[..copy_len].copy_from_slice(&wallet_rom[..copy_len]);
+
+        defmt::info!("Wallet ROM loaded to HyperRAM");
+
+        // 3. Pass the GB save RAM base as the shared SRAM region for the protocol.
+        //    Safety: _s_gb_save_ram is a valid static mutable from memory.x.
+        //    In stealth mode the normal MBC handler never starts.
         let sram_base: *mut u8 = ptr::addr_of_mut!(_s_gb_save_ram);
         run_stealth_mode(ws2812, sram_base).await;
     }

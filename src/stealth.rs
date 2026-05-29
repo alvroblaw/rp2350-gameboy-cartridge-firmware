@@ -22,6 +22,8 @@ use crate::comm::gb_channel::{Command, Frame, GbChannel, ResponseCode};
 use crate::comm::usb_protocol::UsbWalletProtocol;
 use crate::ws2812_spi::Ws2812Led;
 
+use core::ptr;
+
 /// Minimum hold time (ms) to trigger stealth mode.
 /// Prevents accidental triggers from brief button presses during insertion.
 const STEALTH_HOLD_MS: u64 = 2000;
@@ -116,6 +118,10 @@ pub async fn run_stealth_mode(
 
     // Visual confirmation: green LED
     led.write(&smart_leds::RGB8::new(0, 32, 0));
+
+    // The wallet ROM has already been loaded into HyperRAM by main.rs
+    // before calling this function. We just initialize the comm channel
+    // and enter the wallet command loop.
 
     // Initialize the GB communication channel.
     let channel = GbChannel::new(sram_base);

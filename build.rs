@@ -46,6 +46,32 @@ fn main() {
 
     println!("cargo:rerun-if-changed=gb-bootloader/bootloader.c");
 
+    // ---- GB Wallet ROM (compiled with GBDK, same as bootloader) ----
+    let gb_wallet_dir = work_dir.join("gb-wallet");
+
+    let wallet_status = Command::new(&gbdk_lcc)
+        .args(&[
+            "-Wa-l", "-Wl-m", "-Wl-j",
+            "-Wm-p", "-Wm-yc",       // MBC5, color-compatible
+            "-Wm-yt2",                 // 2 ROM banks (32 KiB)
+            "-Wm-ya1",                 // 1 RAM bank (8 KiB SRAM)
+            "-o",
+        ])
+        .arg(out.join("wallet.gb"))
+        .arg(gb_wallet_dir.join("main.c"))
+        .arg(gb_wallet_dir.join("font.c"))
+        .arg(gb_wallet_dir.join("sram_comm.c"))
+        .arg(gb_wallet_dir.join("ui.c"))
+        .status()
+        .expect("failed to execute lcc for wallet ROM");
+
+    assert!(wallet_status.success());
+
+    println!("cargo:rerun-if-changed=gb-wallet/main.c");
+    println!("cargo:rerun-if-changed=gb-wallet/font.c");
+    println!("cargo:rerun-if-changed=gb-wallet/sram_comm.c");
+    println!("cargo:rerun-if-changed=gb-wallet/ui.c");
+
     // The file `memory.x` is loaded by cortex-m-rt's `link.x` script, which
     // is what we specify in `.cargo/config.toml` for Arm builds
     let memory_x = include_bytes!("memory.x");

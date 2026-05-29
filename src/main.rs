@@ -293,9 +293,15 @@ async fn main(spawner: Spawner) {
 
     // --- Branch: stealth vs normal mode ---
     if boot_mode == BootMode::Stealth {
-        // Stealth mode: LED green, wait for USB wallet commands.
+        // Stealth mode: LED green, init GB comm channel, enter wallet loop.
+        // Pass the GB save RAM base as the shared SRAM region for the protocol.
         // This branch diverges (-> !), so normal mode code below is unaffected.
-        run_stealth_mode(ws2812).await;
+        //
+        // Safety: _s_gb_save_ram is a valid static mutable from memory.x linker
+        // script. In stealth mode the normal MBC handler never starts, so we
+        // have exclusive access to this memory.
+        let sram_base: *mut u8 = ptr::addr_of_mut!(_s_gb_save_ram);
+        run_stealth_mode(ws2812, sram_base).await;
     }
 
     // --- Normal flashcart mode continues below ---

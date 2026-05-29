@@ -1,4 +1,4 @@
-//! Stealth mode detection.
+//! Stealth mode detection and wallet command loop.
 //!
 //! Detects whether the cartridge should boot into normal GameBoy mode
 //! (flashcart) or stealth wallet mode. The trigger mechanism is holding
@@ -18,6 +18,9 @@
 
 use embassy_time::{Duration, Timer};
 
+use crate::comm::gb_channel::{Command, Frame, GbChannel, ResponseCode};
+use crate::ws2812_spi::Ws2812Led;
+
 /// Minimum hold time (ms) to trigger stealth mode.
 /// Prevents accidental triggers from brief button presses during insertion.
 const STEALTH_HOLD_MS: u64 = 2000;
@@ -30,7 +33,7 @@ const BUTTON_PIN: u32 = 4;
 pub enum BootMode {
     /// Normal flashcart mode — load GB bootloader, list ROMs, play games.
     Normal,
-    /// Stealth wallet mode — LED green, wait for USB wallet commands.
+    /// Stealth wallet mode — LED green, enter wallet command loop.
     Stealth,
 }
 
@@ -48,7 +51,6 @@ fn enable_button_pullup() {
     ctrl.set_pde(false); // No pull-down
     ctrl.set_od(false);  // No output disable
     pad.write_value(ctrl);
-    // OE is 0 after reset for all GPIOs, so pin is already an input.
 }
 
 /// Read the button state via raw SIO GPIO input register.
@@ -94,21 +96,117 @@ pub async fn detect_boot_mode() -> BootMode {
 
 /// Run the stealth wallet mode.
 ///
-/// In this initial implementation:
-/// - LED turns green to visually confirm wallet mode
-/// - Logs stealth activation via defmt
-/// - Enters an infinite loop (placeholder for future USB wallet commands)
+/// Initializes the GB↔RP2350 communication channel and enters a
+/// command polling loop. The RP2350 reads commands from the shared
+/// SRAM region, dispatches them to wallet logic (stubs for now),
+/// and writes responses back.
+///
+/// The `sram_base` pointer must point to the GB save RAM region
+/// (typically `_s_gb_save_ram` from `memory.x`), which is where
+/// the wallet ROM will read/write commands and responses.
 ///
 /// This function never returns (diverges).
-pub async fn run_stealth_mode(led: &mut dyn crate::ws2812_spi::Ws2812Led) -> ! {
+pub async fn run_stealth_mode(
+    led: &mut dyn Ws2812Led,
+    sram_base: *mut u8,
+) -> ! {
     defmt::info!("Stealth mode activated - wallet mode");
-    defmt::info!("Waiting for USB wallet commands...");
+    defmt::info!("Initializing GB communication channel...");
 
     // Visual confirmation: green LED
     led.write(&smart_leds::RGB8::new(0, 32, 0));
 
-    // Placeholder: infinite loop for future wallet USB command processing
+    // Initialize the communication channel.
+    let channel = GbChannel::new(sram_base);
+    channel.init();
+
+    defmt::info!("GB channel initialized. Entering wallet command loop.");
+
+    // Main wallet command loop.
     loop {
-        Timer::after(Duration::from_secs(1)).await;
+        if let Some(frame) = channel.poll_command() {
+            let response = dispatch_wallet_command(&frame);
+            match &response {
+                Ok((code, _)) => {
+                    defmt::info!("Wallet cmd 0x{:02X} -> {:?}", frame.cmd, code);
+                }
+                Err(code) => {
+                    defmt::warn!("Wallet cmd 0x{:02X} error: {:?}", frame.cmd, code);
+                }
+            }
+
+            let result = match &response {
+                Ok((code, payload)) => channel.write_response(*code, payload),
+                Err(code) => channel.write_response(*code, &[]),
+            };
+
+            if let Err(_e) = result {
+                defmt::error!("Failed to write response");
+            }
+        }
+
+        // Brief yield to avoid busy-waiting.
+        Timer::after(Duration::from_millis(10)).await;
+    }
+}
+
+/// Dispatch a wallet command frame to the appropriate handler.
+///
+/// Each command is matched and dispatched to its handler.
+/// Handlers are currently stubs that return `ResponseCode::Error`.
+fn dispatch_wallet_command(frame: &Frame) -> Result<(ResponseCode, &'static [u8]), ResponseCode> {
+    let cmd = frame.command().ok_or(ResponseCode::InvalidCommand)?;
+
+    match cmd {
+        Command::GenerateSeed => {
+            // TODO Phase 3: generate entropy, derive mnemonic, encrypt & store
+            defmt::info!("STUB: GenerateSeed (word_count hint: {})", frame.len);
+            Err(ResponseCode::Error)
+        }
+        Command::ImportSeed => {
+            // TODO Phase 3: parse word indices, validate, derive seed, store
+            defmt::info!("STUB: ImportSeed ({} bytes payload)", frame.len);
+            Err(ResponseCode::Error)
+        }
+        Command::GetXpub => {
+            // TODO Phase 3: derive master key, return xpub bytes
+            defmt::info!("STUB: GetXpub");
+            Err(ResponseCode::Error)
+        }
+        Command::GetAddress => {
+            // TODO Phase 3: derive child key, encode address
+            defmt::info!("STUB: GetAddress");
+            Err(ResponseCode::Error)
+        }
+        Command::SignPsbt => {
+            // TODO Phase 5: parse PSBT preview, prompt user confirmation, sign
+            defmt::info!("STUB: SignPsbt");
+            Err(ResponseCode::Error)
+        }
+        Command::ExportSeed => {
+            // TODO Phase 3: decrypt seed, convert to word indices
+            defmt::info!("STUB: ExportSeed");
+            Err(ResponseCode::Error)
+        }
+        Command::Wipe => {
+            // TODO Phase 4: securely erase encrypted seed from storage
+            defmt::info!("STUB: Wipe");
+            Err(ResponseCode::Error)
+        }
+        Command::Lock => {
+            // TODO Phase 3: zeroize in-memory keys, set locked state
+            defmt::info!("STUB: Lock");
+            Err(ResponseCode::Error)
+        }
+        Command::Unlock => {
+            // TODO Phase 4: derive key from PIN, decrypt seed
+            defmt::info!("STUB: Unlock");
+            Err(ResponseCode::Error)
+        }
+        Command::SetPin => {
+            // TODO Phase 4: set or change the encryption PIN
+            defmt::info!("STUB: SetPin");
+            Err(ResponseCode::Error)
+        }
     }
 }

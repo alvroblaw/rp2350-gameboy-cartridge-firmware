@@ -11,8 +11,8 @@
 //! - `keys`  — KeySource trait and StoredKey implementation
 //! - `address` — Bitcoin address generation (SegWit, P2SH, legacy)
 //! - `psbt`  — PSBT parsing and signing (Phase 5)
-//! - `encrypt` — Seed encryption (Phase 4)
-//! - `storage` — Encrypted seed persistence on SD card (Phase 4)
+//! - `encrypt` — Seed encryption with PBKDF2 + AES-256-GCM
+//! - `storage` — Encrypted seed persistence on SD card
 
 pub mod address;
 pub mod bip32;
@@ -26,4 +26,6 @@ pub mod storage;
 pub use address::{Address, AddressType};
 pub use bip32::{ExtendedPrivateKey, ExtendedPublicKey, Network};
 pub use bip39::{Mnemonic, WordCount};
+pub use encrypt::{EncryptedSeed, PinEntry, PinRateLimiter, ZeroizingVec};
 pub use keys::{KeySource, StoredKey, KeyError};
+pub use storage::SeedStorage;

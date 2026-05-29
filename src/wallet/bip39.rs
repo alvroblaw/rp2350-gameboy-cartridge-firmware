@@ -226,7 +226,7 @@ pub enum Bip39Error {
 /// Stored in flash as a const array. Each word is referenced
 /// by its 11-bit index (0-2047). The list is sorted for binary search.
 #[rustfmt::skip]
-pub const WORDLIST: [&str; 2029] = [
+pub const WORDLIST: [&str; 2048] = [
     "abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract",
     "absurd", "abuse", "access", "accident", "account", "accuse", "achieve", "acid",
     "acoustic", "acquire", "across", "act", "action", "actor", "actress", "actual",

@@ -19,6 +19,7 @@
 use embassy_time::{Duration, Timer};
 
 use crate::comm::gb_channel::{Command, Frame, GbChannel, ResponseCode};
+use crate::comm::usb_protocol::UsbWalletProtocol;
 use crate::ws2812_spi::Ws2812Led;
 
 /// Minimum hold time (ms) to trigger stealth mode.
@@ -116,16 +117,21 @@ pub async fn run_stealth_mode(
     // Visual confirmation: green LED
     led.write(&smart_leds::RGB8::new(0, 32, 0));
 
-    // Initialize the communication channel.
+    // Initialize the GB communication channel.
     let channel = GbChannel::new(sram_base);
     channel.init();
 
-    defmt::info!("GB channel initialized. Entering wallet command loop.");
+    // Initialize the USB wallet protocol handler.
+    let mut usb_proto = UsbWalletProtocol::new();
+
+    defmt::info!("Channels initialized. Entering wallet command loop.");
 
     // Main wallet command loop.
+    // Polls both GB channel and USB protocol state.
     loop {
+        // --- GB channel commands (from GameBoy ROM) ---
         if let Some(frame) = channel.poll_command() {
-            let response = dispatch_wallet_command(&frame);
+            let response = dispatch_wallet_command(&frame, &mut usb_proto);
             match &response {
                 Ok((code, _)) => {
                     defmt::info!("Wallet cmd 0x{:02X} -> {:?}", frame.cmd, code);
@@ -145,6 +151,35 @@ pub async fn run_stealth_mode(
             }
         }
 
+        // --- USB protocol state machine ---
+        // Check if USB handler has a pending PSBT awaiting GB confirmation.
+        // In a full implementation, the USB CDC task reads frames and calls
+        // usb_proto.handle_usb_command(). Here we check the signing state
+        // and bridge it to the GB display.
+        match usb_proto.state() {
+            crate::comm::usb_protocol::SigningState::AwaitingConfirmation => {
+                // Send TX preview to GB for display
+                let preview = usb_proto.tx_preview();
+                defmt::info!(
+                    "USB TX pending: {} sats to {}, fee {}",
+                    preview.amount_sats,
+                    preview.destination.as_str(),
+                    preview.fee_sats
+                );
+
+                // TODO: Send DISPLAY_TX command to GB ROM via channel
+                // For now, auto-reject after timeout (safety)
+                // In full implementation, wait for USER_CONFIRMED/USER_REJECTED from GB
+            }
+            crate::comm::usb_protocol::SigningState::Signed => {
+                defmt::info!("USB: signed PSBT ready for retrieval");
+            }
+            crate::comm::usb_protocol::SigningState::Rejected => {
+                defmt::info!("USB: TX rejected");
+            }
+            crate::comm::usb_protocol::SigningState::Idle => {}
+        }
+
         // Brief yield to avoid busy-waiting.
         Timer::after(Duration::from_millis(10)).await;
     }
@@ -154,7 +189,10 @@ pub async fn run_stealth_mode(
 ///
 /// Each command is matched and dispatched to its handler.
 /// Handlers are currently stubs that return `ResponseCode::Error`.
-fn dispatch_wallet_command(frame: &Frame) -> Result<(ResponseCode, &'static [u8]), ResponseCode> {
+fn dispatch_wallet_command(
+    frame: &Frame,
+    usb_proto: &mut UsbWalletProtocol,
+) -> Result<(ResponseCode, &'static [u8]), ResponseCode> {
     let cmd = frame.command().ok_or(ResponseCode::InvalidCommand)?;
 
     match cmd {
@@ -179,9 +217,27 @@ fn dispatch_wallet_command(frame: &Frame) -> Result<(ResponseCode, &'static [u8]
             Err(ResponseCode::Error)
         }
         Command::SignPsbt => {
-            // TODO Phase 5: parse PSBT preview, prompt user confirmation, sign
-            defmt::info!("STUB: SignPsbt");
-            Err(ResponseCode::Error)
+            // PSBT data arrives from GB ROM (which received it from USB host).
+            // Parse and display TX details.
+            defmt::info!("SignPsbt: {} bytes payload", frame.len);
+
+            // Try to parse the PSBT
+            match crate::wallet::psbt::PsbtParser::parse_preview(frame.payload_slice()) {
+                Ok(preview) => {
+                    defmt::info!(
+                        "TX: {} sats to {}, fee {}",
+                        preview.amount_sats,
+                        preview.destination.as_str(),
+                        preview.fee_sats
+                    );
+                    // TODO: wait for user confirmation from GB
+                    Err(ResponseCode::Error)
+                }
+                Err(e) => {
+                    defmt::warn!("PSBT parse error: {:?}", e);
+                    Err(ResponseCode::Error)
+                }
+            }
         }
         Command::ExportSeed => {
             // TODO Phase 3: decrypt seed, convert to word indices

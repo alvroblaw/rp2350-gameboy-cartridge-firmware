@@ -1,111 +1,90 @@
-//! Key source abstraction for wallet key management.
+//! Key management for the stealth wallet.
 //!
-//! Defines the `KeySource` trait to abstract over where keys come from.
-//! Currently implements `StoredKey` (encrypted seed on SD card).
-//! Future: `QRScanKey` for stateless mode with camera module.
+//! Defines the `KeySource` trait for abstracting key access (stored keys
+//! vs future stateless QR-scanned keys) and provides the `StoredKey`
+//! implementation for keys persisted in encrypted storage.
+//!
+//! **Status**: Stub — full implementation in Phase 3.
 
 #![allow(unused)]
 
-use crate::wallet::bip32::{ExtendedPrivateKey, Network};
+use crate::wallet::bip32::{Bip32Error, ExtendedPrivateKey, Network};
 
-/// Trait for sources of wallet keys.
+/// Trait for abstracting key access.
 ///
-/// This abstraction allows the wallet to work with stored keys (current)
-/// or stateless keys scanned from QR codes (future camera module).
+/// This allows the wallet to work with both stored keys (current Phase 4)
+/// and future stateless keys (Phase 6 — QR camera input).
 pub trait KeySource {
-    /// Initialize the key source (e.g., decrypt seed from storage).
-    fn init(&mut self, pin: &[u8]) -> Result<(), KeyError>;
+    /// Get the extended private key for the given network.
+    fn get_master_key(&self, network: Network) -> Result<ExtendedPrivateKey, KeyError>;
 
-    /// Get the master extended private key.
-    fn master_key(&self, network: Network) -> Result<ExtendedPrivateKey, KeyError>;
+    /// Check if a key is currently available.
+    fn is_available(&self) -> bool;
 
-    /// Check if keys are currently loaded in memory.
-    fn is_loaded(&self) -> bool;
-
-    /// Clear all key material from memory (zeroize).
-    fn wipe(&mut self);
-
-    /// Export the seed as mnemonic words.
-    fn export_mnemonic(&self) -> Result<MnemonicExport, KeyError>;
-
-    /// Export the account-level extended public key.
-    fn export_xpub(&self, network: Network) -> Result<[u8; 111], KeyError>;
+    /// Export mnemonic word indices.
+    fn export_mnemonic_indices(&self) -> Result<[u16; 24], KeyError>;
 }
 
-/// A stored key source backed by encrypted seed on SD card.
+/// A key stored in encrypted persistent storage.
+///
+/// The seed is encrypted with a key derived from the user's PIN.
+/// On unlock, the seed is decrypted into RAM and used for key derivation.
+/// On lock, the seed is zeroized from RAM.
+///
+/// **Status**: Stub — full implementation in Phase 3/4.
 pub struct StoredKey {
-    /// Whether the seed is currently decrypted in memory.
-    loaded: bool,
+    /// Whether the key is currently unlocked (seed in RAM).
+    unlocked: bool,
 }
 
 impl StoredKey {
-    /// Create a new stored key source.
+    /// Create a new empty stored key.
     pub fn new() -> Self {
-        Self { loaded: false }
+        Self { unlocked: false }
     }
 
-    /// Generate a new random seed and store it encrypted on SD.
-    pub fn generate_and_store(
-        &mut self,
-        pin: &[u8],
-    ) -> Result<crate::wallet::bip39::Mnemonic, KeyError> {
-        todo!("Generate seed, encrypt, store on SD")
+    /// Lock the key (zeroize seed from RAM).
+    pub fn lock(&mut self) {
+        self.unlocked = false;
     }
 
-    /// Import an existing mnemonic and store it encrypted on SD.
-    pub fn import_and_store(&mut self, mnemonic: &str, pin: &[u8]) -> Result<(), KeyError> {
-        todo!("Parse mnemonic, encrypt seed, store on SD")
+    /// Check if the key is unlocked.
+    pub fn is_unlocked(&self) -> bool {
+        self.unlocked
     }
 }
 
 impl KeySource for StoredKey {
-    fn init(&mut self, pin: &[u8]) -> Result<(), KeyError> {
-        todo!("Read encrypted seed from SD, decrypt with PIN-derived key")
+    fn get_master_key(&self, _network: Network) -> Result<ExtendedPrivateKey, KeyError> {
+        if !self.unlocked {
+            return Err(KeyError::Locked);
+        }
+        // TODO: Phase 3 — decrypt seed, derive master key
+        Err(KeyError::NoSeed)
     }
 
-    fn master_key(&self, network: Network) -> Result<ExtendedPrivateKey, KeyError> {
-        todo!("Derive master key from decrypted seed")
+    fn is_available(&self) -> bool {
+        self.unlocked
     }
 
-    fn is_loaded(&self) -> bool {
-        self.loaded
+    fn export_mnemonic_indices(&self) -> Result<[u16; 24], KeyError> {
+        if !self.unlocked {
+            return Err(KeyError::Locked);
+        }
+        // TODO: Phase 3
+        Err(KeyError::NoSeed)
     }
-
-    fn wipe(&mut self) {
-        self.loaded = false;
-        // TODO: zeroize seed material
-    }
-
-    fn export_mnemonic(&self) -> Result<MnemonicExport, KeyError> {
-        todo!("Convert seed back to mnemonic words")
-    }
-
-    fn export_xpub(&self, network: Network) -> Result<[u8; 111], KeyError> {
-        todo!("Derive and export xpub")
-    }
-}
-
-/// Mnemonic export data.
-pub struct MnemonicExport {
-    /// Word count (12 or 24).
-    pub word_count: u8,
-    /// Word indices into the BIP-39 wordlist.
-    pub word_indices: [u16; 24],
 }
 
 /// Key management errors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyError {
-    /// No seed stored on SD card.
-    NoSeedStored,
-    /// PIN derivation failed.
-    PinError,
-    /// Decryption failed (wrong PIN or corrupted data).
-    DecryptionFailed,
-    /// Key not loaded (must call init first).
-    NotLoaded,
-    /// SD card I/O error.
-    StorageError,
-    /// Invalid mnemonic.
-    InvalidMnemonic,
+    /// Wallet is locked.
+    Locked,
+    /// No seed stored.
+    NoSeed,
+    /// Key derivation failed.
+    DerivationError,
+    /// Invalid key material.
+    InvalidKey,
 }

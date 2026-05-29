@@ -1,7 +1,9 @@
 //! Bitcoin address generation.
 //!
 //! Generates receive addresses from derived public keys.
-//! Supports native SegWit (bech32), SegWit-P2SH (base58), and legacy (base58).
+//! Supports native SegWit (bech32), SegWit-P2SH, and legacy P2PKH.
+//!
+//! **Status**: Stub — full implementation in Phase 3.
 
 #![allow(unused)]
 
@@ -18,35 +20,42 @@ pub enum AddressType {
     Legacy,
 }
 
+/// Maximum address string length.
+const MAX_ADDR_LEN: usize = 112;
+
 /// A generated Bitcoin address.
+#[derive(Clone)]
 pub struct Address {
-    /// The address string bytes.
-    data: [u8; 112],
-    /// Length of the address string.
-    len: u8,
+    /// The address string.
+    data: heapless::String<MAX_ADDR_LEN>,
     /// Address type.
     addr_type: AddressType,
 }
 
 impl Address {
     /// Generate a native SegWit (bech32) address from a compressed public key.
-    pub fn native_segwit(pubkey: &[u8; 33], network: Network) -> Result<Self, AddressError> {
-        todo!("Implement bech32 address generation")
+    ///
+    /// BIP-84: HASH160(pubkey) → witness program version 0 → bech32 encode.
+    pub fn native_segwit(_pubkey: &[u8; 33], _network: Network) -> Result<Self, AddressError> {
+        // TODO: Phase 3 — implement bech32 encoding
+        Err(AddressError::EncodingError)
     }
 
     /// Generate a SegWit-P2SH address from a compressed public key.
-    pub fn segwit_p2sh(pubkey: &[u8; 33], network: Network) -> Result<Self, AddressError> {
-        todo!("Implement P2SH-SegWit address generation")
+    pub fn segwit_p2sh(_pubkey: &[u8; 33], _network: Network) -> Result<Self, AddressError> {
+        // TODO: Phase 3
+        Err(AddressError::EncodingError)
     }
 
     /// Generate a legacy P2PKH address from a compressed public key.
-    pub fn legacy(pubkey: &[u8; 33], network: Network) -> Result<Self, AddressError> {
-        todo!("Implement P2PKH address generation")
+    pub fn legacy(_pubkey: &[u8; 33], _network: Network) -> Result<Self, AddressError> {
+        // TODO: Phase 3
+        Err(AddressError::EncodingError)
     }
 
     /// Get the address as a string slice.
     pub fn as_str(&self) -> &str {
-        todo!("Return address string")
+        &self.data
     }
 
     /// Get the address type.
@@ -60,8 +69,10 @@ impl Address {
 pub enum AddressError {
     /// Hash computation failed.
     HashError,
-    /// Encoding failed (bech32/base58).
+    /// Bech32 or base58 encoding failed.
     EncodingError,
     /// Invalid public key.
     InvalidPublicKey,
+    /// Key derivation failed.
+    DerivationError,
 }

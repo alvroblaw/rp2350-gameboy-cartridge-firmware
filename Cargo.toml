@@ -39,18 +39,22 @@ embedded-sdmmc = { version= "0.8.0", features = ["defmt-log"], default-features 
 
 panic-probe = { version = "0.3", features = ["print-defmt"] }
 
-# Wallet dependencies (uncomment as implemented)
-# secp256k1 = { version = "0.29", default-features = false, features = ["lowmemory"] }
-# sha2 = { version = "0.10", default-features = false }
-# hmac = { version = "0.12", default-features = false }
-# bip39 = { version = "2.0", default-features = false }
-# bitcoin = { version = "0.32", default-features = false, features = ["no-std"] }
-# bech32 = { version = "0.11", default-features = false }
-# pbkdf2 = { version = "0.12", default-features = false }
-# aes-gcm = { version = "0.10", default-features = false }
-# zeroize = { version = "1.8", default-features = false, features = ["derive"] }
-# hkdf = { version = "0.12", default-features = false }
-# hex = { version = "0.4", default-features = false }
+# Wallet dependencies — Phase 3: Cryptographic foundation
+# Using k256 (pure Rust) instead of secp256k1 (needs C compiler for ARM)
+# heapless provides no_std Vec/String for address encoding
+k256 = { version = "0.13", default-features = false, features = ["arithmetic", "ecdsa", "sha256"] }
+sha2 = { version = "0.10", default-features = false }
+hmac = { version = "0.12", default-features = false }
+pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
+hkdf = { version = "0.12", default-features = false }
+bech32 = { version = "0.11", default-features = false, features = ["alloc"] }
+zeroize = { version = "1.8", default-features = false, features = ["derive"] }
+hex = { version = "0.4", default-features = false, features = ["alloc"] }
+heapless = { version = "0.8", default-features = false }
+# RIPEMD-160 for address hashing (SHA256 then RIPEMD160 = HASH160)
+ripemd = { version = "0.1", default-features = false }
+# Minimal base58 for address encoding (legacy P2PKH, P2SH)
+# We implement base58check ourselves to avoid extra dep
 
 [build-dependencies]
 built = { version = "0.7", features = ["git2", "chrono"] }

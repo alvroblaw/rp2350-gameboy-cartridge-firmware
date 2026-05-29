@@ -1,79 +1,67 @@
-//! Seed encryption and decryption for secure storage.
+//! Seed encryption module.
 //!
-//! Encrypts the BIP-39 seed using a key derived from the user's PIN
-//! via PBKDF2-HMAC-SHA256. Uses AES-256-GCM for authenticated encryption.
-//! The encrypted seed is stored on the SD card.
+//! Encrypts/decrypts the BIP-39 seed for secure storage on SD card.
+//! Uses PBKDF2 for key derivation from PIN, and AES-256-GCM for encryption.
+//!
+//! **Phase 4 scope** — this module is a stub until encryption is implemented.
 
 #![allow(unused)]
 
-/// Encrypted seed data ready for storage.
+/// Encrypted seed data.
+///
+/// Contains the encrypted seed bytes, salt, and nonce.
+/// Can be serialized to/from SD card.
 pub struct EncryptedSeed {
-    /// PBKDF2 salt (16 bytes).
-    pub salt: [u8; 16],
-    /// AES-256-GCM nonce (12 bytes).
-    pub nonce: [u8; 12],
-    /// Encrypted seed bytes (64 bytes for BIP-39 seed).
-    pub ciphertext: [u8; 64],
-    /// GCM authentication tag (16 bytes).
-    pub tag: [u8; 16],
-    /// PBKDF2 iteration count used.
-    pub iterations: u32,
+    /// Salt for PBKDF2 key derivation (16 bytes).
+    salt: [u8; 16],
+    /// Nonce for AES-GCM (12 bytes).
+    nonce: [u8; 12],
+    /// Encrypted seed bytes (64 bytes + 16 byte GCM tag = 80 bytes).
+    ciphertext: [u8; 80],
 }
 
 impl EncryptedSeed {
-    /// Encrypt a seed with a PIN-derived key.
+    /// Create a new encrypted seed from a PIN and raw seed.
     ///
-    /// Uses PBKDF2-HMAC-SHA256 with the given iterations to derive an
-    /// AES-256 key from the PIN, then encrypts with AES-256-GCM.
-    pub fn encrypt(seed: &[u8; 64], pin: &[u8], iterations: u32) -> Result<Self, EncryptError> {
-        todo!("Implement seed encryption")
+    /// Derives an encryption key from the PIN using PBKDF2,
+    /// then encrypts the seed with AES-256-GCM.
+    pub fn encrypt(pin: &[u8], seed: &[u8; 64]) -> Result<Self, EncryptError> {
+        todo!("Phase 4: implement seed encryption with PBKDF2 + AES-256-GCM")
     }
 
-    /// Decrypt a seed with a PIN-derived key.
+    /// Decrypt the seed using a PIN.
     ///
-    /// Derives the same AES-256 key from PIN + salt, then decrypts
-    /// and verifies the GCM authentication tag.
+    /// Returns the raw 64-byte seed, or an error if the PIN is wrong.
     pub fn decrypt(&self, pin: &[u8]) -> Result<[u8; 64], EncryptError> {
-        todo!("Implement seed decryption")
+        todo!("Phase 4: implement seed decryption")
     }
 
-    /// Serialize to bytes for SD card storage.
-    pub fn to_bytes(&self) -> [u8; 112] {
-        let mut out = [0u8; 112];
-        out[..16].copy_from_slice(&self.salt);
-        out[16..28].copy_from_slice(&self.nonce);
-        out[28..92].copy_from_slice(&self.ciphertext);
-        out[92..108].copy_from_slice(&self.tag);
-        out[108..112].copy_from_slice(&self.iterations.to_le_bytes());
-        out
+    /// Serialize to bytes for storage on SD card.
+    pub fn to_bytes(&self) -> [u8; 108] {
+        let mut buf = [0u8; 108];
+        buf[..16].copy_from_slice(&self.salt);
+        buf[16..28].copy_from_slice(&self.nonce);
+        buf[28..108].copy_from_slice(&self.ciphertext);
+        buf
     }
 
-    /// Deserialize from SD card bytes.
-    pub fn from_bytes(data: &[u8; 112]) -> Result<Self, EncryptError> {
-        Ok(Self {
-            salt: data[..16].try_into().unwrap(),
-            nonce: data[16..28].try_into().unwrap(),
-            ciphertext: data[28..92].try_into().unwrap(),
-            tag: data[92..108].try_into().unwrap(),
-            iterations: u32::from_le_bytes(data[108..112].try_into().unwrap()),
-        })
+    /// Deserialize from bytes read from SD card.
+    pub fn from_bytes(data: &[u8; 108]) -> Self {
+        let mut salt = [0u8; 16];
+        let mut nonce = [0u8; 12];
+        let mut ciphertext = [0u8; 80];
+        salt.copy_from_slice(&data[..16]);
+        nonce.copy_from_slice(&data[16..28]);
+        ciphertext.copy_from_slice(&data[28..108]);
+        Self { salt, nonce, ciphertext }
     }
 }
 
-/// Default PBKDF2 iteration count.
-/// Higher = more secure but slower PIN entry.
-/// RP2350 at 266MHz can handle 100k iterations in ~1 second.
-pub const DEFAULT_PBKDF2_ITERATIONS: u32 = 100_000;
-
-/// Encryption/decription errors.
+/// Encryption errors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EncryptError {
-    /// Key derivation failed.
-    DerivationError,
     /// Decryption failed (wrong PIN or corrupted data).
     DecryptionFailed,
-    /// Authentication tag mismatch (tampered data or wrong PIN).
-    AuthFailed,
-    /// Encryption failed.
-    EncryptionError,
+    /// Key derivation failed.
+    KeyDerivationError,
 }

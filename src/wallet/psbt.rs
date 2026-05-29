@@ -1,121 +1,81 @@
 //! PSBT (Partially Signed Bitcoin Transaction) parsing and signing.
 //!
-//! Parses PSBT v0 and v2 formats received via USB, displays transaction
-//! details for user verification on the GameBoy screen, and signs inputs
-//! using derived private keys.
+//! Handles PSBT v0 and v2 for signing transactions on the device.
+//! The flow is:
+//! 1. Receive unsigned PSBT from host (via USB)
+//! 2. Parse and display transaction details (amount, destination, fee)
+//! 3. User confirms via GameBoy buttons
+//! 4. Sign each input with the derived private key
+//! 5. Return signed PSBT to host
+//!
+//! **Phase 5 scope** — this module is a stub until PSBT signing is implemented.
 
 #![allow(unused)]
 
-/// A parsed PSBT ready for display and signing.
+/// A parsed PSBT transaction ready for display and signing.
 pub struct ParsedPsbt {
     /// Number of inputs.
     input_count: u8,
     /// Number of outputs.
     output_count: u8,
-    /// Total fee in satoshis.
-    fee_sat: u64,
-    /// Lock time.
-    lock_time: u32,
-}
-
-/// Transaction output for display purposes.
-pub struct TxOutput {
-    /// Destination address (bech32 or base58).
-    address: [u8; 112],
-    /// Address string length.
-    address_len: u8,
-    /// Amount in satoshis.
-    amount_sat: u64,
-    /// Whether this is a change output (back to our wallet).
-    is_change: bool,
-}
-
-/// Transaction input information.
-pub struct TxInput {
-    /// Previous transaction hash (32 bytes).
-    prev_txid: [u8; 32],
-    /// Previous output index.
-    prev_vout: u32,
-    /// Derivation path for signing.
-    derivation_path: [u32; 8],
-    /// Path length.
-    path_len: u8,
+    /// Total input amount (satoshis).
+    input_amount: u64,
+    /// Total output amount (satoshis).
+    output_amount: u64,
+    /// Fee in satoshis.
+    fee: u64,
 }
 
 impl ParsedPsbt {
-    /// Parse a PSBT from raw bytes.
-    ///
-    /// Supports both PSBT v0 (BIP-174) and v2 (BIP-370).
+    /// Parse a raw PSBT from bytes.
     pub fn parse(data: &[u8]) -> Result<Self, PsbtError> {
-        todo!("Implement PSBT parsing")
+        todo!("Phase 5: implement PSBT parsing")
     }
 
-    /// Get the displayable outputs for user verification.
-    pub fn outputs(&self) -> &[TxOutput] {
-        todo!("Extract outputs for display")
+    /// Get the number of inputs.
+    pub fn input_count(&self) -> u8 {
+        self.input_count
     }
 
-    /// Get the inputs that need signing.
-    pub fn inputs(&self) -> &[TxInput] {
-        todo!("Extract inputs for signing")
+    /// Get the number of outputs.
+    pub fn output_count(&self) -> u8 {
+        self.output_count
     }
 
-    /// Get the total output amount going to external addresses (excl. change).
-    pub fn external_amount(&self) -> u64 {
-        todo!("Calculate total external output amount")
+    /// Get the fee in satoshis.
+    pub fn fee(&self) -> u64 {
+        self.fee
     }
 
-    /// Sign all inputs with the appropriate derived keys.
-    ///
-    /// Uses BIP-143 sighash for SegWit inputs.
-    pub fn sign(&mut self, key_source: &dyn crate::wallet::keys::KeySource) -> Result<(), PsbtError> {
-        todo!("Implement PSBT signing")
-    }
-
-    /// Serialize the signed PSBT back to bytes.
-    pub fn to_bytes(&self) -> Result<PsbtBytes, PsbtError> {
-        todo!("Serialize signed PSBT")
-    }
-
-    /// Get a summary string for display on GameBoy (amount, fee, address preview).
-    pub fn display_summary(&self) -> PsbtSummary {
-        todo!("Build display summary")
+    /// Get the total amount being sent (output amount minus change).
+    pub fn amount_sent(&self) -> u64 {
+        self.output_amount
     }
 }
 
-/// Fixed-size PSBT byte buffer (PSBTs can be large).
-pub struct PsbtBytes {
-    pub data: [u8; 2048],
-    pub len: u16,
-}
-
-/// Compact PSBT summary for GameBoy display.
-pub struct PsbtSummary {
-    /// Amount going to external address (satoshis).
-    pub amount: u64,
-    /// Fee in satoshis.
-    pub fee: u64,
-    /// Destination address (truncated for display).
-    pub address_preview: [u8; 20],
+/// Sign a parsed PSBT with the given key.
+///
+/// Returns the signed PSBT bytes, ready to send back to the host.
+pub fn sign_psbt(
+    psbt: &ParsedPsbt,
+    _signing_key: &[u8; 32],
+) -> Result<arrayvec::ArrayVec<u8, 2048>, PsbtError> {
+    todo!("Phase 5: implement PSBT signing")
 }
 
 /// PSBT operation errors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PsbtError {
-    /// Invalid PSBT magic bytes.
+    /// PSBT magic bytes not found or invalid.
     InvalidMagic,
-    /// Unsupported PSBT version.
+    /// PSBT version not supported.
     UnsupportedVersion,
-    /// Parse error in PSBT fields.
-    ParseError,
-    /// No inputs to sign.
-    NoInputs,
-    /// Signing failed (key derivation or secp256k1 error).
-    SigningError,
-    /// PSBT too large for buffer.
-    TooLarge,
+    /// Invalid PSBT structure.
+    InvalidStructure,
     /// Missing required field.
     MissingField,
-    /// Serialization error.
-    SerializeError,
+    /// Signing failed.
+    SigningError,
+    /// Output buffer too small for signed PSBT.
+    BufferTooSmall,
 }

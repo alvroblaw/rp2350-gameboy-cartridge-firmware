@@ -13,6 +13,7 @@
 //! - `psbt`  — PSBT parsing and signing (Phase 5)
 //! - `encrypt` — Seed encryption with PBKDF2 + AES-256-GCM
 //! - `storage` — Encrypted seed persistence on SD card
+//! - `secure_memory` — Secure wrappers that zeroize on Drop
 
 pub mod address;
 pub mod bip32;
@@ -20,6 +21,7 @@ pub mod bip39;
 pub mod encrypt;
 pub mod keys;
 pub mod psbt;
+pub mod secure_memory;
 pub mod state;
 pub mod storage;
 
@@ -29,5 +31,6 @@ pub use bip32::{ExtendedPrivateKey, ExtendedPublicKey, Network};
 pub use bip39::{Mnemonic, WordCount};
 pub use encrypt::{EncryptedSeed, PinEntry, PinRateLimiter, ZeroizingVec};
 pub use keys::{KeySource, StoredKey, KeyError};
+pub use secure_memory::{SecureArray, SecureBox, SecureSlice, secure_scrub_stack};
 pub use state::{WalletState, WalletStatus, WalletError};
 pub use storage::SeedStorage;

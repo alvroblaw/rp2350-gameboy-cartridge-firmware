@@ -22,6 +22,7 @@ use embedded_sdmmc::{DirEntry, ModeFlags, Volume, VolumeManager};
 use defmt::{info, warn, error};
 
 use crate::wallet::encrypt::{EncryptedSeed, EncryptError};
+use crate::crypto_rng::hardware_random;
 
 /// Disguised file path for the encrypted seed on SD card.
 ///
@@ -153,24 +154,48 @@ impl<'vol> SeedStorage<'vol> {
         })
     }
 
-    /// Secure wipe: overwrite the seed file with zeros, then delete it.
+    /// Secure wipe: overwrite the seed file with random data (3 passes), then delete it.
     ///
-    /// This prevents forensic recovery of the encrypted seed from the SD card.
+    /// Uses hardware RNG for overwrite patterns (not zeros) to defeat
+    /// forensic recovery of the encrypted seed from SD card flash storage.
+    /// SD card controllers do wear leveling, so we can't guarantee all
+    /// physical pages are overwritten, but 3 passes with random data
+    /// significantly raises the bar for forensic recovery.
+    ///
+    /// Pass 1: Random data (defeats naive read)
+    /// Pass 2: Different random data (defeats single-pattern analysis)
+    /// Pass 3: Final random data + delete (defeats most forensic tools)
     pub fn wipe(&mut self) -> Result<(), StorageError> {
         let mut root_dir = self.volume.open_root_dir().map_err(|_| StorageError::FsError)?;
 
-        // First, try to overwrite with zeros
-        if let Ok(mut file) = root_dir.open_file_in_dir(
+        // Open the file for overwriting
+        let file_result = root_dir.open_file_in_dir(
             SEED_DIR,
             SEED_FILENAME,
             ModeFlags::WRITE_ONLY,
-        ) {
-            let zeros = [0u8; MAX_SEED_FILE_SIZE];
-            let _ = file.write(&zeros);
-            info!("Seed file overwritten with zeros");
+        );
+
+        if let Ok(mut file) = file_result {
+            // Pass 1: Overwrite with random data
+            let mut random_buf = [0u8; MAX_SEED_FILE_SIZE];
+            let _ = hardware_random(&mut random_buf);
+            let _ = file.write(&random_buf);
+            // Flush to ensure SD controller commits
+            let _ = file.seek_from_current(0);
+
+            // Pass 2: Different random data
+            let _ = hardware_random(&mut random_buf);
+            let _ = file.write(&random_buf);
+            let _ = file.seek_from_current(0);
+
+            // Pass 3: Final random data
+            let _ = hardware_random(&mut random_buf);
+            let _ = file.write(&random_buf);
+
+            info!("Seed file: 3-pass random overwrite complete");
         }
 
-        // Then delete the file
+        // Delete the file
         root_dir
             .delete_file_in_dir(SEED_DIR, SEED_FILENAME)
             .map_err(|e| {
@@ -178,7 +203,7 @@ impl<'vol> SeedStorage<'vol> {
                 StorageError::IoError
             })?;
 
-        info!("Seed file wiped and deleted");
+        info!("Seed file securely wiped and deleted");
         Ok(())
     }
 

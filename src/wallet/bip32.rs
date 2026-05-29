@@ -298,6 +298,11 @@ impl ExtendedPrivKey {
     }
 }
 
+/// Alias for `ExtendedPrivKey` — matches the public API naming convention.
+pub type ExtendedPrivateKey = ExtendedPrivKey;
+/// Alias for `ExtendedPubKey` — matches the public API naming convention.
+pub type ExtendedPublicKey = ExtendedPubKey;
+
 /// A BIP-32 extended public key.
 #[derive(Clone)]
 pub struct ExtendedPubKey {

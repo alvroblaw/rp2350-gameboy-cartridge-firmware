@@ -13,6 +13,7 @@
 #![allow(unused)]
 
 use sha2::{Digest, Sha256};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::crypto_rng::{hardware_random, CryptoRng};
 
@@ -44,21 +45,13 @@ impl WordCount {
 /// A BIP-39 mnemonic phrase.
 ///
 /// Stores entropy bytes internally. Words are derived on demand.
-/// Implements Zeroize on Drop to clear sensitive material.
-#[derive(Clone)]
+/// Implements `#[zeroize(drop)]` to automatically clear entropy on Drop.
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct Mnemonic {
     /// Entropy bytes (first 16 or 32 bytes used depending on word_count).
     entropy: [u8; 32],
     /// Number of words (12 or 24).
     word_count: WordCount,
-}
-
-impl Drop for Mnemonic {
-    fn drop(&mut self) {
-        // Zeroize entropy on drop
-        use zeroize::Zeroize;
-        self.entropy.zeroize();
-    }
 }
 
 impl Mnemonic {

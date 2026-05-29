@@ -43,22 +43,14 @@ pub trait KeySource {
 /// On unlock, the seed is decrypted into internal RAM and used for key derivation.
 /// On lock or Drop, the seed is cryptographically zeroized.
 #[derive(Zeroize)]
+#[zeroize(drop)]
 pub struct StoredKey {
     /// The decrypted seed (32 or 64 bytes).
-    #[zeroize(skip)] // We handle zeroize manually via Drop
     seed: [u8; 64],
     /// Actual seed length.
     seed_len: u8,
     /// Whether the key is currently unlocked (seed in RAM).
     unlocked: bool,
-}
-
-impl Drop for StoredKey {
-    fn drop(&mut self) {
-        self.seed.zeroize();
-        self.seed_len = 0;
-        self.unlocked = false;
-    }
 }
 
 impl StoredKey {

@@ -207,6 +207,13 @@ pub enum SigningState {
 /// Manages incoming USB commands and tracks signing state.
 /// This struct is designed to be called from the USB CDC-ACM read loop
 /// in the main stealth mode task.
+///
+/// # Security
+///
+/// - **Locked-mode allowlist**: When the wallet is locked, only
+///   `GET_FIRMWARE_VERSION` is accepted. All other commands return `ERR_LOCKED`.
+/// - **Rate limiting**: Max 10 commands per second. Excess commands
+///   return `ERR_BUSY`.
 pub struct UsbWalletProtocol {
     /// Current signing state.
     state: SigningState,
@@ -216,7 +223,16 @@ pub struct UsbWalletProtocol {
     signed_psbt: heapless::Vec<u8, MAX_PAYLOAD>,
     /// TX details for GB display (destination address, amount, fee).
     tx_preview: TxPreview,
+    /// Whether the wallet is currently unlocked (keys in memory).
+    wallet_unlocked: bool,
+    /// Rate limiter: timestamp of last command (ms since boot).
+    last_cmd_ms: u64,
+    /// Number of commands received in the current 1-second window.
+    cmd_count: u8,
 }
+
+/// Maximum USB commands per second.
+const MAX_CMDS_PER_SEC: u8 = 10;
 
 /// Simplified transaction preview for display on the GameBoy screen.
 #[derive(Debug, Clone)]
@@ -247,7 +263,29 @@ impl UsbWalletProtocol {
             unsigned_psbt: heapless::Vec::new(),
             signed_psbt: heapless::Vec::new(),
             tx_preview: TxPreview::default(),
+            wallet_unlocked: false,
+            last_cmd_ms: 0,
+            cmd_count: 0,
         }
+    }
+
+    /// Set wallet lock state. Call from wallet state machine.
+    pub fn set_wallet_unlocked(&mut self, unlocked: bool) {
+        self.wallet_unlocked = unlocked;
+    }
+
+    /// Check if rate limit is exceeded for the given timestamp.
+    ///
+    /// Allows max `MAX_CMDS_PER_SEC` commands per 1000ms window.
+    fn check_rate_limit(&mut self, now_ms: u64) -> bool {
+        if now_ms.saturating_sub(self.last_cmd_ms) >= 1000 {
+            // New window
+            self.last_cmd_ms = now_ms;
+            self.cmd_count = 1;
+            return true;
+        }
+        self.cmd_count = self.cmd_count.saturating_add(1);
+        self.cmd_count <= MAX_CMDS_PER_SEC
     }
 
     /// Get current signing state.
@@ -273,12 +311,28 @@ impl UsbWalletProtocol {
     ///
     /// Returns the response frame bytes to send back to the host.
     /// `resp_buf` must be at least HDR + MAX_PAYLOAD + CRC_SZ bytes.
+    ///
+    /// # Security
+    ///
+    /// 1. **Rate limiting**: Max 10 commands/second. Excess returns `ERR_BUSY`.
+    /// 2. **Locked allowlist**: Only `GET_FIRMWARE_VER` allowed when wallet is locked.
     pub fn handle_usb_command(
         &mut self,
         cmd: u8,
         payload: &[u8],
         resp_buf: &mut [u8],
+        now_ms: u64,
     ) -> Result<usize, UsbProtoError> {
+        // Rate limit check
+        if !self.check_rate_limit(now_ms) {
+            return encode_frame(RESP_ERROR, &[ERR_BUSY], resp_buf);
+        }
+
+        // Locked-mode allowlist: only GET_FIRMWARE_VER when wallet is locked
+        if !self.wallet_unlocked && cmd != CMD_GET_FIRMWARE_VER {
+            return encode_frame(RESP_ERROR, &[ERR_LOCKED], resp_buf);
+        }
+
         match cmd {
             CMD_SEND_PSBT => self.handle_send_psbt(payload, resp_buf),
             CMD_GET_SIGNED_PSBT => self.handle_get_signed(resp_buf),
@@ -683,7 +737,7 @@ mod tests {
 
         // Simulate receiving a PSBT (just dummy data for now)
         let psbt_data = b"psbt\xff";
-        let n = proto.handle_usb_command(CMD_SEND_PSBT, psbt_data, &mut resp).unwrap();
+        let n = proto.handle_usb_command(CMD_SEND_PSBT, psbt_data, &mut resp, 0).unwrap();
 
         // Should get NEED_CONFIRM response (if parsing succeeds)
         // or ERROR (if parser rejects it) — both are valid outcomes
@@ -699,7 +753,7 @@ mod tests {
     fn test_protocol_handler_get_firmware() {
         let mut proto = UsbWalletProtocol::new();
         let mut resp = [0u8; 128];
-        let n = proto.handle_usb_command(CMD_GET_FIRMWARE_VER, &[], &mut resp).unwrap();
+        let n = proto.handle_usb_command(CMD_GET_FIRMWARE_VER, &[], &mut resp, 0).unwrap();
         let (cmd, payload) = decode_frame(&resp[..n]).unwrap();
         assert_eq!(cmd, RESP_OK);
         assert!(payload.starts_with(b"croco-wallet"));

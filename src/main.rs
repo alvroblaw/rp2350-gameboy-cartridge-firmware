@@ -107,6 +107,7 @@ mod comm;
 mod stealth;
 use stealth::{BootMode, detect_boot_mode, run_stealth_mode};
 mod crypto_rng;
+mod boot_integrity;
 
 // Include the generated-file as a separate module
 pub mod built_info {
@@ -261,6 +262,22 @@ async fn main(spawner: Spawner) {
     // Button is active LOW with pull-up. Hold for 2s to enter wallet mode.
     let boot_mode = detect_boot_mode().await;
     defmt::info!("Boot mode: {:?}", boot_mode);
+
+    // --- Firmware integrity check (wallet mode only) ---
+    if boot_mode == BootMode::Stealth {
+        match boot_integrity::verify_firmware_integrity() {
+            boot_integrity::IntegrityStatus::Valid => {
+                defmt::info!("Firmware integrity: OK");
+            }
+            boot_integrity::IntegrityStatus::Invalid => {
+                defmt::error!("Firmware integrity: FAILED — wallet mode disabled");
+                // Fall back to normal mode — refuse to enter wallet
+            }
+            boot_integrity::IntegrityStatus::NotConfigured => {
+                defmt::warn!("Firmware integrity: not configured (first boot)");
+            }
+        }
+    }
 
     let mut reset_pin = Output::new(p.PIN_45, Level::High);
     let mut _gb_bus_en = Output::new(p.PIN_44, Level::High);

@@ -21,6 +21,14 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn main() {
+    // Skip all embedded build steps when not targeting the embedded ARM chip
+    let target = std::env::var("TARGET").unwrap_or_default();
+    if !target.starts_with("thumb") {
+        // Host build (e.g. cargo test) — skip GBDK, memory.x, version checks
+        built::write_built_file().ok(); // best-effort
+        return;
+    }
+
     // Put the linker script somewhere the linker can find it
     let out = PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
     println!("cargo:rustc-link-search={}", out.display());
@@ -31,7 +39,7 @@ fn main() {
     let mut gbdk_lcc = PathBuf::from(std::env::var_os("GBDK_PATH").unwrap());
     gbdk_lcc.push("bin/lcc");
 
-    let lcc_status = Command::new(gbdk_lcc)
+    let lcc_status = Command::new(&gbdk_lcc)
         .args(&[
             "-Wa-l", "-Wl-m", "-Wl-j", "-Wm-p", "-Wm-yc", "-Wm-yt2", "-Wm-ya1", "-o",
         ])

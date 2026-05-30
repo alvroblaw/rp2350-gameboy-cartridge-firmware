@@ -15,7 +15,6 @@
 use crate::wallet::encrypt::{EncryptedSeed, PinEntry, PinRateLimiter, ZeroizingVec};
 use crate::wallet::bip32::{ExtendedPrivateKey, Network};
 use crate::wallet::bip39::Mnemonic;
-use crate::wallet::keys::KeySource;
 
 /// Wallet state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, defmt::Format)]
@@ -67,7 +66,7 @@ impl WalletState {
 
     /// Get the Bitcoin network.
     pub fn network(&self) -> Network {
-        self.network
+        self.network.clone()
     }
 
     /// Check if the wallet is unlocked.
@@ -104,10 +103,10 @@ impl WalletState {
         let mnemonic = Mnemonic::generate(crate::wallet::bip39::WordCount::Words24)?;
 
         // Derive seed from mnemonic
-        let seed = mnemonic.to_seed();
+        let seed = mnemonic.to_seed("");
 
         // Encrypt seed with PIN
-        let encrypted = EncryptedSeed::encrypt(seed.as_slice(), pin)
+        let _encrypted = EncryptedSeed::encrypt(seed.as_slice(), pin)
             .map_err(WalletError::Encrypt)?;
 
         // Store the seed in memory (locked)
@@ -116,7 +115,7 @@ impl WalletState {
         self.seed = Some(zv);
 
         // Derive master key
-        let master = ExtendedPrivateKey::new_master(seed.as_slice(), self.network)?;
+        let master = ExtendedPrivateKey::new_master(seed.as_slice(), self.network.clone())?;
         self.master_key = Some(master);
 
         // Transition to unlocked
@@ -147,7 +146,7 @@ impl WalletState {
                 self.rate_limiter.record_success();
 
                 // Derive master key
-                let master = ExtendedPrivateKey::new_master(seed.as_slice(), self.network)?;
+                let master = ExtendedPrivateKey::new_master(seed.as_slice(), self.network.clone())?;
 
                 self.seed = Some(seed);
                 self.master_key = Some(master);

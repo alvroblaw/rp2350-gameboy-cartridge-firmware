@@ -5,43 +5,67 @@ version = "0.1.0"
 license = "GPLv3"
 
 
+[features]
+default = ["embedded"]
+embedded = [
+    "dep:embassy-embedded-hal",
+    "dep:embassy-sync",
+    "dep:embassy-executor",
+    "dep:embassy-time",
+    "dep:embassy-rp",
+    "dep:embassy-usb",
+    "dep:embassy-futures",
+    "dep:cortex-m",
+    "dep:cortex-m-rt",
+    "dep:critical-section",
+    "dep:smart-leds",
+    "dep:cstr_core",
+    "dep:rtcc",
+    "dep:embedded-sdmmc",
+    "dep:panic-probe",
+    "dep:embedded-hal-1",
+    "dep:embedded-hal-bus",
+    "dep:embedded-io",
+    "dep:defmt-serial",
+    "dep:fixed",
+    "dep:fixed-macro",
+]
+
 [dependencies]
-embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy", rev = "05a6f7a7957d891c20f00f428a36abb0da1c921a", features = ["defmt"] }
-embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "05a6f7a7957d891c20f00f428a36abb0da1c921a", features = ["defmt"] }
-embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "05a6f7a7957d891c20f00f428a36abb0da1c921a", features = ["arch-cortex-m", "executor-thread", "executor-interrupt", "defmt"] }
-embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "05a6f7a7957d891c20f00f428a36abb0da1c921a", features = ["defmt", "defmt-timestamp-uptime"] }
-embassy-rp = { git = "https://github.com/embassy-rs/embassy", rev = "05a6f7a7957d891c20f00f428a36abb0da1c921a", features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rp235xb", "binary-info"] }
-embassy-usb = { git = "https://github.com/embassy-rs/embassy", rev = "05a6f7a7957d891c20f00f428a36abb0da1c921a", features = ["defmt"] }
-embassy-futures = { git = "https://github.com/embassy-rs/embassy", rev = "05a6f7a7957d891c20f00f428a36abb0da1c921a", features = ["defmt"] }
+# Embedded deps (optional for host testing)
+embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy", rev = "05a6f7a7957d891c20f00f428a36abb0da1c921a", features = ["defmt"], optional = true }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "05a6f7a7957d891c20f00f428a36abb0da1c921a", features = ["defmt"], optional = true }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "05a6f7a7957d891c20f00f428a36abb0da1c921a", features = ["arch-cortex-m", "executor-thread", "executor-interrupt", "defmt"], optional = true }
+embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "05a6f7a7957d891c20f00f428a36abb0da1c921a", features = ["defmt", "defmt-timestamp-uptime"], optional = true }
+embassy-rp = { git = "https://github.com/embassy-rs/embassy", rev = "05a6f7a7957d891c20f00f428a36abb0da1c921a", features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rp235xb", "binary-info"], optional = true }
+embassy-usb = { git = "https://github.com/embassy-rs/embassy", rev = "05a6f7a7957d891c20f00f428a36abb0da1c921a", features = ["defmt"], optional = true }
+embassy-futures = { git = "https://github.com/embassy-rs/embassy", rev = "05a6f7a7957d891c20f00f428a36abb0da1c921a", features = ["defmt"], optional = true }
 
 defmt = "0.3"
-#defmt-rtt = "0.4"
-embedded-hal-1 = { package = "embedded-hal", version = "1.0" }
-embedded-hal-bus = { version = "0.1", features = ["async"] }
-embedded-io = { version = "0.6.1", features = ["defmt-03"] }
-defmt-serial = { version = "0.10.0" }
-fixed = "1.23.1"
-fixed-macro = "1.2"
+embedded-hal-1 = { package = "embedded-hal", version = "1.0", optional = true }
+embedded-hal-bus = { version = "0.1", features = ["async"], optional = true }
+embedded-io = { version = "0.6.1", features = ["defmt-03"], optional = true }
+defmt-serial = { version = "0.10.0", optional = true }
+fixed = { version = "1.23.1", optional = true }
+fixed-macro = { version = "1.2", optional = true }
 static_cell = "2.1"
 arrayvec = { version = "0.7.6", default-features = false }
 crc16 = "0.4.0"
 
-cortex-m = { version = "0.7.6", features = ["inline-asm"] }
-cortex-m-rt = "0.7.0"
-critical-section = "1.1"
-smart-leds = "0.3.0"
+cortex-m = { version = "0.7.6", features = ["inline-asm"], optional = true }
+cortex-m-rt = { version = "0.7.0", optional = true }
+critical-section = { version = "1.1", optional = true }
+smart-leds = { version = "0.3.0", optional = true }
 
-cstr_core = { version = "0.2.6", default-features = false }
+cstr_core = { version = "0.2.6", default-features = false, optional = true }
 
-rtcc = { version = "0.3.2" }
+rtcc = { version = "0.3.2", optional = true }
 
-embedded-sdmmc = { version= "0.8.0", features = ["defmt-log"], default-features = false }
+embedded-sdmmc = { version = "0.8.0", features = ["defmt-log"], default-features = false, optional = true }
 
-panic-probe = { version = "0.3", features = ["print-defmt"] }
+panic-probe = { version = "0.3", features = ["print-defmt"], optional = true }
 
-# Wallet dependencies — Phase 3: Cryptographic foundation
-# Using k256 (pure Rust) instead of secp256k1 (needs C compiler for ARM)
-# heapless provides no_std Vec/String for address encoding
+# Wallet dependencies — always available (pure Rust crypto, no_std compatible)
 k256 = { version = "0.13", default-features = false, features = ["arithmetic", "ecdsa", "sha256"] }
 sha2 = { version = "0.10", default-features = false }
 hmac = { version = "0.12", default-features = false }
@@ -51,10 +75,8 @@ bech32 = { version = "0.11", default-features = false, features = ["alloc"] }
 zeroize = { version = "1.8", default-features = false, features = ["derive"] }
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
 heapless = { version = "0.8", default-features = false }
-# RIPEMD-160 for address hashing (SHA256 then RIPEMD160 = HASH160)
 ripemd = { version = "0.1", default-features = false }
-# Minimal base58 for address encoding (legacy P2PKH, P2SH)
-# We implement base58check ourselves to avoid extra dep
+aes-gcm = { version = "0.10", default-features = false, features = ["aes"] }
 
 [build-dependencies]
 built = { version = "0.7", features = ["git2", "chrono"] }

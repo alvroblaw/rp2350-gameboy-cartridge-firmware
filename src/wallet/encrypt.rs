@@ -95,7 +95,7 @@ impl EncryptedSeed {
             .map_err(|_| EncryptError::EncryptionFailed)?;
 
         // Append tag
-        buffer.extend_from_slice(&tag.into_bytes())
+        buffer.extend_from_slice(&tag)
             .map_err(|_| EncryptError::EncryptionFailed)?;
 
         Ok(Self {
@@ -129,13 +129,13 @@ impl EncryptedSeed {
         let ct_end = data_len - TAG_LEN;
         let tag_bytes: [u8; TAG_LEN] = self.data[ct_end..].try_into()
             .map_err(|_| EncryptError::DecryptionFailed)?;
-        let tag = Tag::from(tag_bytes);
+        let tag = Tag::<Aes256Gcm>::from(tag_bytes);
 
         // Copy ciphertext into mutable buffer
         let mut plaintext = ZeroizingVec::new(self.seed_len as usize);
         plaintext.extend_from_slice(&self.data[..ct_end]);
 
-        cipher.decrypt_in_place_detached(nonce, b"", &mut plaintext.buf, &tag)
+        cipher.decrypt_in_place_detached(nonce, b"", plaintext.buf_mut(), &tag)
             .map_err(|_| EncryptError::DecryptionFailed)?;
 
         Ok(plaintext)

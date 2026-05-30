@@ -23,6 +23,7 @@ pub mod keys;
 pub mod psbt;
 pub mod secure_memory;
 pub mod state;
+#[cfg(feature = "embedded")]
 pub mod storage;
 
 // Re-export key types for convenience
@@ -33,4 +34,5 @@ pub use encrypt::{EncryptedSeed, PinEntry, PinRateLimiter, ZeroizingVec};
 pub use keys::{KeySource, StoredKey, KeyError};
 pub use secure_memory::{SecureArray, SecureBox, SecureSlice, secure_scrub_stack};
 pub use state::{WalletState, WalletStatus, WalletError};
+#[cfg(feature = "embedded")]
 pub use storage::SeedStorage;

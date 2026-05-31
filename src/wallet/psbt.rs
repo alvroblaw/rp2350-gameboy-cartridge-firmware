@@ -205,7 +205,7 @@ fn encode_bech32_address(witness_program: &[u8]) -> heapless::String<34> {
 }
 
 /// Convert 8-bit to 5-bit groups (for bech32).
-fn convertbits_8to5(data: &[u8]) -> Vec<u8> {
+fn convertbits_8to5(data: &[u8]) -> Vec<u8, 64> {
     let mut acc: u32 = 0;
     let mut bits: u32 = 0;
     let mut ret = Vec::new();

@@ -173,12 +173,8 @@ where
         let mut root_dir = self.volume.open_root_dir().map_err(|_| StorageError::FsError)?;
 
         // Open the file for overwriting
-        let file_result = match root_dir.open_dir(SEED_DIR) {
-            Ok(mut saves_dir) => saves_dir.open_file_in_dir(SEED_FILENAME, Mode::ReadWriteTruncate),
-            Err(_) => return Err(StorageError::NotFound),
-        };
-
-        if let Ok(mut file) = file_result {
+        let mut saves_dir = root_dir.open_dir(SEED_DIR).map_err(|_| StorageError::NotFound)?;
+        if let Ok(mut file) = saves_dir.open_file_in_dir(SEED_FILENAME, Mode::ReadWriteTruncate) {
             // Pass 1: Overwrite with random data
             let mut random_buf = [0u8; MAX_SEED_FILE_SIZE];
             let _ = hardware_random(&mut random_buf);
@@ -213,7 +209,7 @@ where
 
     /// Check if a seed file exists on the SD card.
     pub fn has_seed(&mut self) -> bool {
-        let root_dir = match self.volume.open_root_dir() {
+        let mut root_dir = match self.volume.open_root_dir() {
             Ok(d) => d,
             Err(_) => return false,
         };

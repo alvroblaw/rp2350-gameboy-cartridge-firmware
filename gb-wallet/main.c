@@ -30,6 +30,7 @@
 
 #include <gbdk/platform.h>
 #include <gbdk/font.h>
+#include <gb/gb.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -133,7 +134,7 @@ void main(void)
 
     /* Load our custom font */
     font_tiles = 128; /* Start after system tiles */
-    font_load(font_tiles);
+    wallet_font_load(font_tiles);
 
     /* Initialize SRAM communication */
     sram_comm_init();

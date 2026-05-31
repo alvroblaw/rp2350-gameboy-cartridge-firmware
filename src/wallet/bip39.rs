@@ -13,13 +13,14 @@
 #![allow(unused)]
 
 use sha2::{Digest, Sha256};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::Zeroize;
 
 use crate::crypto_rng::{hardware_random, CryptoRng};
 
 /// Supported mnemonic word counts.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WordCount {
+    #[default]
     Words12 = 12,
     Words24 = 24,
 }
@@ -45,8 +46,8 @@ impl WordCount {
 /// A BIP-39 mnemonic phrase.
 ///
 /// Stores entropy bytes internally. Words are derived on demand.
-/// Implements `#[zeroize(drop)]` to automatically clear entropy on Drop.
-#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+/// Clears entropy on Drop.
+#[derive(Clone)]
 pub struct Mnemonic {
     /// Entropy bytes (first 16 or 32 bytes used depending on word_count).
     entropy: [u8; 32],
@@ -236,21 +237,21 @@ pub const WORDLIST: [&str; 2048] = [
     "artist", "artwork", "ask", "aspect", "assault", "asset", "assist", "assume",
     "asthma", "athlete", "atom", "attack", "attend", "attitude", "attract", "auction",
     "audit", "august", "aunt", "author", "auto", "autumn", "average", "avocado",
-    "avoid", "awake", "aware", "awesome", "awful", "awkward", "axis", "baby",
+    "avoid", "awake", "aware", "away", "awesome", "awful", "awkward", "axis", "baby",
     "bachelor", "bacon", "badge", "bag", "balance", "balcony", "ball", "bamboo",
     "banana", "banner", "bar", "barely", "bargain", "barrel", "base", "basic",
     "basket", "battle", "beach", "bean", "beauty", "because", "become", "beef",
     "before", "begin", "behave", "behind", "believe", "below", "belt", "bench",
     "benefit", "best", "betray", "better", "between", "beyond", "bicycle", "bid",
     "bike", "bind", "biology", "bird", "birth", "bitter", "black", "blade",
-    "blame", "blanket", "blast", "bleak", "bless", "blind", "blood", "blossom",
-    "blow", "blue", "blur", "blush", "board", "boat", "body", "boil",
+    "blame", "blanket", "blast", "bleak", "bless", "blind", "blood", "blossom", "blouse",
+    "blue", "blur", "blush", "board", "boat", "body", "boil",
     "bomb", "bone", "bonus", "book", "boost", "border", "boring", "borrow",
     "boss", "bottom", "bounce", "box", "boy", "bracket", "brain", "brand",
     "brass", "brave", "bread", "breeze", "brick", "bridge", "brief", "bright",
     "bring", "brisk", "broccoli", "broken", "bronze", "broom", "brother", "brown",
     "brush", "bubble", "buddy", "budget", "buffalo", "build", "bulb", "bulk",
-    "bullet", "bundle", "bunny", "burden", "burger", "burst", "bus", "business",
+    "bullet", "bundle", "bunker", "burden", "burger", "burst", "bus", "business",
     "busy", "butter", "buyer", "buzz", "cabbage", "cabin", "cable", "cactus",
     "cage", "cake", "call", "calm", "camera", "camp", "can", "canal",
     "cancel", "candy", "cannon", "canoe", "canvas", "canyon", "capable", "capital",
@@ -258,9 +259,9 @@ pub const WORDLIST: [&str; 2048] = [
     "case", "cash", "casino", "castle", "casual", "cat", "catalog", "catch",
     "category", "cattle", "caught", "cause", "caution", "cave", "ceiling", "celery",
     "cement", "census", "century", "cereal", "certain", "chair", "chalk", "champion",
-    "change", "chaos", "chapter", "charge", "chase", "cheap", "check", "cheese",
+    "change", "chaos", "chapter", "charge", "chase", "chat", "cheap", "check", "cheese",
     "chef", "cherry", "chest", "chicken", "chief", "child", "chimney", "choice",
-    "choose", "chronic", "chuckle", "chunk", "churn", "citizen", "city", "civil",
+    "choose", "chronic", "chuckle", "chunk", "churn", "cigar", "cinnamon", "circle", "citizen", "city", "civil",
     "claim", "clap", "clarify", "claw", "clay", "clean", "clerk", "clever",
     "click", "client", "cliff", "climb", "clinic", "clip", "clock", "clog",
     "close", "cloth", "cloud", "clown", "club", "clump", "cluster", "clutch",
@@ -272,7 +273,7 @@ pub const WORDLIST: [&str; 2048] = [
     "coyote", "crack", "cradle", "craft", "cram", "crane", "crash", "crater",
     "crawl", "crazy", "cream", "credit", "creek", "crew", "cricket", "crime",
     "crisp", "critic", "crop", "cross", "crouch", "crowd", "crucial", "cruel",
-    "cruise", "crumble", "crush", "cry", "crystal", "cube", "culture", "cup",
+    "cruise", "crumble", "crunch", "crush", "cry", "crystal", "cube", "culture", "cup",
     "cupboard", "curious", "current", "curtain", "curve", "cushion", "custom", "cute",
     "cycle", "dad", "damage", "damp", "dance", "danger", "daring", "dash",
     "daughter", "dawn", "day", "deal", "debate", "debris", "decade", "december",
@@ -292,7 +293,7 @@ pub const WORDLIST: [&str; 2048] = [
     "easy", "echo", "ecology", "economy", "edge", "edit", "educate", "effort",
     "egg", "eight", "either", "elbow", "elder", "electric", "elegant", "element",
     "elephant", "elevator", "elite", "else", "embark", "embody", "embrace", "emerge",
-    "emotion", "employ", "empower", "empty", "enable", "encourage", "end", "endless",
+    "emotion", "employ", "empower", "empty", "enable", "enact", "end", "endless",
     "endorse", "enemy", "energy", "enforce", "engage", "engine", "enhance", "enjoy",
     "enlist", "enough", "enrich", "enroll", "ensure", "enter", "entire", "entry",
     "envelope", "episode", "equal", "equip", "era", "erase", "erode", "erosion",
@@ -306,7 +307,7 @@ pub const WORDLIST: [&str; 2048] = [
     "fatigue", "fault", "favorite", "feature", "february", "federal", "fee", "feed",
     "feel", "female", "fence", "festival", "fetch", "fever", "few", "fiber",
     "fiction", "field", "figure", "file", "film", "filter", "final", "find",
-    "fine", "finger", "finish", "fire", "firm", "fiscal", "fish", "fit",
+    "fine", "finger", "finish", "fire", "firm", "first", "fiscal", "fish", "fit",
     "fitness", "fix", "flag", "flame", "flash", "flat", "flavor", "flee",
     "flight", "flip", "float", "flock", "floor", "flower", "fluid", "flush",
     "fly", "foam", "focus", "fog", "foil", "fold", "follow", "food",
@@ -326,7 +327,7 @@ pub const WORDLIST: [&str; 2048] = [
     "gun", "gym", "habit", "hair", "half", "hammer", "hamster", "hand",
     "happy", "harbor", "hard", "harsh", "harvest", "hat", "have", "hawk",
     "hazard", "head", "health", "heart", "heavy", "hedgehog", "height", "hello",
-    "helmet", "help", "hen", "hero", "hip", "hire", "history", "hobby",
+    "helmet", "help", "hen", "hero", "hidden", "high", "hill", "hint", "hip", "hire", "history", "hobby",
     "hockey", "hold", "hole", "holiday", "hollow", "home", "honey", "hood",
     "hope", "horn", "horror", "horse", "hospital", "host", "hotel", "hour",
     "hover", "hub", "huge", "human", "humble", "humor", "hundred", "hungry",
@@ -334,7 +335,7 @@ pub const WORDLIST: [&str; 2048] = [
     "idea", "identify", "idle", "ignore", "ill", "illegal", "illness", "image",
     "imitate", "immense", "immune", "impact", "impose", "improve", "impulse", "inch",
     "include", "income", "increase", "index", "indicate", "indoor", "industry", "infant",
-    "inflict", "inform", "initial", "inject", "inmate", "inner", "innocent", "input",
+    "inflict", "inform", "inhale", "inherit", "initial", "inject", "injury", "inmate", "inner", "innocent", "input",
     "inquiry", "insane", "insect", "inside", "inspire", "install", "intact", "interest",
     "into", "invest", "invite", "involve", "iron", "island", "isolate", "issue",
     "item", "ivory", "jacket", "jaguar", "jar", "jazz", "jealous", "jeans",
@@ -346,7 +347,7 @@ pub const WORDLIST: [&str; 2048] = [
     "lamp", "language", "laptop", "large", "later", "latin", "laugh", "laundry",
     "lava", "law", "lawn", "lawsuit", "layer", "lazy", "leader", "leaf",
     "learn", "leave", "lecture", "left", "leg", "legal", "legend", "leisure",
-    "lemon", "lend", "length", "lens", "leopard", "lesson", "letter", "level",
+    "lemon", "lend", "length", "lens", "leopard", "lesson", "letter", "level", "liar",
     "liberty", "library", "license", "life", "lift", "light", "like", "limb",
     "limit", "link", "lion", "liquid", "list", "little", "live", "lizard",
     "load", "loan", "lobster", "local", "lock", "logic", "lonely", "long",
@@ -356,7 +357,7 @@ pub const WORDLIST: [&str; 2048] = [
     "manage", "mandate", "mango", "mansion", "manual", "maple", "marble", "march",
     "margin", "marine", "market", "marriage", "mask", "mass", "master", "match",
     "material", "math", "matrix", "matter", "maximum", "maze", "meadow", "mean",
-    "measure", "meat", "mechanic", "media", "melody", "melt", "member", "memory",
+    "measure", "meat", "mechanic", "medal", "media", "melody", "melt", "member", "memory",
     "mention", "menu", "mercy", "merge", "merit", "merry", "mesh", "message",
     "metal", "method", "middle", "midnight", "milk", "million", "mimic", "mind",
     "minimum", "minor", "minute", "miracle", "mirror", "misery", "miss", "mistake",
@@ -368,7 +369,7 @@ pub const WORDLIST: [&str; 2048] = [
     "narrow", "nasty", "nation", "nature", "near", "neck", "need", "negative",
     "neglect", "neither", "nephew", "nerve", "nest", "net", "network", "neutral",
     "never", "news", "next", "nice", "night", "noble", "noise", "nominee",
-    "noodle", "normal", "north", "nose", "notable", "nothing", "notice", "novel",
+    "noodle", "normal", "north", "nose", "notable", "note", "nothing", "notice", "novel",
     "now", "nuclear", "number", "nurse", "nut", "oak", "obey", "object",
     "oblige", "obscure", "observe", "obtain", "obvious", "occur", "ocean", "october",
     "odor", "off", "offer", "office", "often", "oil", "okay", "old",
@@ -386,7 +387,7 @@ pub const WORDLIST: [&str; 2048] = [
     "pioneer", "pipe", "pistol", "pitch", "pizza", "place", "planet", "plastic",
     "plate", "play", "please", "pledge", "pluck", "plug", "plunge", "poem",
     "poet", "point", "polar", "pole", "police", "pond", "pony", "pool",
-    "popular", "portion", "pose", "position", "possible", "post", "potato", "pottery",
+    "popular", "portion", "position", "possible", "post", "potato", "pottery",
     "poverty", "powder", "power", "practice", "praise", "predict", "prefer", "prepare",
     "present", "pretty", "prevent", "price", "pride", "primary", "print", "priority",
     "prison", "private", "prize", "problem", "process", "produce", "profit", "program",
@@ -394,11 +395,11 @@ pub const WORDLIST: [&str; 2048] = [
     "public", "pudding", "pull", "pulp", "pulse", "pumpkin", "punch", "pupil",
     "puppy", "purchase", "purity", "purpose", "purse", "push", "put", "puzzle",
     "pyramid", "quality", "quantum", "quarter", "question", "quick", "quit", "quiz",
-    "quote", "rabbit", "raccoon", "race", "rack", "radar", "radio", "rage",
+    "quote", "rabbit", "raccoon", "race", "rack", "radar", "radio",
     "rail", "rain", "raise", "rally", "ramp", "ranch", "random", "range",
     "rapid", "rare", "rate", "rather", "raven", "raw", "razor", "ready",
     "real", "reason", "rebel", "rebuild", "recall", "receive", "recipe", "record",
-    "recycle", "reduce", "reflect", "reform", "region", "regret", "regular", "reject",
+    "recycle", "reduce", "reflect", "reform", "refuse", "region", "regret", "regular", "reject",
     "relax", "release", "relief", "rely", "remain", "remember", "remind", "remove",
     "render", "renew", "rent", "reopen", "repair", "repeat", "replace", "report",
     "require", "rescue", "resemble", "resist", "resource", "response", "result", "retire",
@@ -428,7 +429,7 @@ pub const WORDLIST: [&str; 2048] = [
     "someone", "song", "soon", "sorry", "sort", "soul", "sound", "soup",
     "source", "south", "space", "spare", "spatial", "spawn", "speak", "special",
     "speed", "spell", "spend", "sphere", "spice", "spider", "spike", "spin",
-    "spirit", "split", "sponsor", "spoon", "sport", "spot", "spray", "spread",
+    "spirit", "split", "spoil", "sponsor", "spoon", "sport", "spot", "spray", "spread",
     "spring", "spy", "square", "squeeze", "squirrel", "stable", "stadium", "staff",
     "stage", "stairs", "stamp", "stand", "start", "state", "stay", "steak",
     "steel", "stem", "step", "stereo", "stick", "still", "sting", "stock",
@@ -437,7 +438,7 @@ pub const WORDLIST: [&str; 2048] = [
     "subway", "success", "such", "sudden", "suffer", "sugar", "suggest", "suit",
     "summer", "sun", "sunny", "sunset", "super", "supply", "supreme", "sure",
     "surface", "surge", "surprise", "surround", "survey", "suspect", "sustain", "swallow",
-    "swamp", "swap", "swarm", "swear", "sweet", "swim", "swing", "switch",
+    "swamp", "swap", "swarm", "swear", "sweet", "swift", "swim", "swing", "switch",
     "sword", "symbol", "symptom", "syrup", "system", "table", "tackle", "tag",
     "tail", "talent", "talk", "tank", "tape", "target", "task", "taste",
     "tattoo", "taxi", "teach", "team", "tell", "ten", "tenant", "tennis",
@@ -451,12 +452,12 @@ pub const WORDLIST: [&str; 2048] = [
     "town", "toy", "track", "trade", "traffic", "tragic", "train", "transfer",
     "trap", "trash", "travel", "tray", "treat", "tree", "trend", "trial",
     "tribe", "trick", "trigger", "trim", "trip", "trophy", "trouble", "truck",
-    "true", "truly", "trumpet", "trust", "truth", "try", "tube", "tuna",
+    "true", "truly", "trumpet", "trust", "truth", "try", "tube", "tuition", "tumble", "tuna",
     "tunnel", "turkey", "turn", "turtle", "twelve", "twenty", "twice", "twin",
     "twist", "two", "type", "typical", "ugly", "umbrella", "unable", "unaware",
     "uncle", "uncover", "under", "undo", "unfair", "unfold", "unhappy", "uniform",
-    "union", "unique", "unit", "universe", "unknown", "unlock", "until", "unusual",
-    "unveil", "update", "upgrade", "uphold", "upon", "upper", "upset", "urban",
+    "unique", "unit", "universe", "unknown", "unlock", "until", "unusual",
+    "unveil", "update", "upgrade", "uphold", "upon", "upper", "upset", "urban", "urge",
     "usage", "use", "used", "useful", "useless", "usual", "utility", "vacant",
     "vacuum", "vague", "valid", "valley", "valve", "van", "vanish", "vapor",
     "various", "vast", "vault", "vehicle", "velvet", "vendor", "venture", "venue",
@@ -466,7 +467,7 @@ pub const WORDLIST: [&str; 2048] = [
     "void", "volcano", "volume", "vote", "voyage", "wage", "wagon", "wait",
     "walk", "wall", "walnut", "want", "warfare", "warm", "warrior", "wash",
     "wasp", "waste", "water", "wave", "way", "wealth", "weapon", "wear",
-    "weasel", "weather", "web", "wedding", "weekend", "weird", "welcome", "well",
+    "weasel", "weather", "web", "wedding", "weekend", "weird", "welcome",
     "west", "wet", "whale", "what", "wheat", "wheel", "when", "where",
     "whip", "whisper", "wide", "width", "wife", "wild", "will", "win",
     "window", "wine", "wing", "wink", "winner", "winter", "wire", "wisdom",
@@ -475,3 +476,9 @@ pub const WORDLIST: [&str; 2048] = [
     "wrist", "write", "wrong", "yard", "year", "yellow", "you", "young",
     "youth", "zebra", "zero", "zone", "zoo",
 ];
+
+impl Drop for Mnemonic {
+    fn drop(&mut self) {
+        self.entropy.zeroize();
+    }
+}

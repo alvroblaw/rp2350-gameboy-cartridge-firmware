@@ -31,7 +31,7 @@ RUN apt-get update && \
         # ARM toolchain
         gcc-arm-none-eabi \
         libnewlib-arm-none-eabi \
-        # clang tools (for formatting etc.)
+        # clang tools
         clang-format \
     && rm -rf /var/lib/apt/lists/*
 
@@ -68,14 +68,15 @@ RUN git clone --depth 1 --branch 2.1.1 \
     rm -rf /tmp/picotool
 
 # =============================================================================
-# sdcc (patched for GBDK) — built from source
-# This is the slow part (~10-20 min). Keeps its own layer for caching.
+# sdcc r14228 (patched for GBDK) + GBDK 4.2.0
+# Built together as one layer since GBDK needs the sdcc build directory.
+# This mirrors the original shilga Dockerfile but on Debian instead of Alpine.
+# ~15-20 min first build.
 # =============================================================================
 ARG GBDK_PATH=/usr/share/gbdk
-ARG SDCC_BUILD=/tmp/sdcc-build
 
-RUN svn checkout -q -r r14228 svn://svn.code.sf.net/p/sdcc/code/trunk ${SDCC_BUILD} && \
-    cd ${SDCC_BUILD}/sdcc && \
+RUN svn checkout -q -r r14228 svn://svn.code.sf.net/p/sdcc/code/trunk /tmp/sdcc-r14228 && \
+    cd /tmp/sdcc-r14228/sdcc && \
     curl -Lo gbdk-sdcc-patch-file \
         https://github.com/gbdk-2020/gbdk-2020-sdcc/releases/download/patches/gbdk-4.2-nes_banked_nonbanked_v4_combined.diff.patch && \
     patch -p0 -f < gbdk-sdcc-patch-file && \
@@ -90,22 +91,22 @@ RUN svn checkout -q -r r14228 svn://svn.code.sf.net/p/sdcc/code/trunk ${SDCC_BUI
         --disable-pdk14-port --disable-pdk15-port --disable-ucsim --disable-doc --disable-device-lib && \
     make -j$(nproc) && \
     make install && \
-    # Verify sdcc works
+    # Verify sdcc installed correctly
     /opt/sdcc/bin/sdcc --version && \
-    rm -rf ${SDCC_BUILD}
+    test -f /opt/sdcc/libexec/sdcc/cc1 && \
+    echo "sdcc build + install OK"
 
-# Add sdcc to PATH so GBDK can find it
+# Build GBDK 4.2.0 using the installed sdcc
+ENV SDCCDIR=/opt/sdcc
 ENV PATH="/opt/sdcc/bin:${PATH}"
-ENV SDCCDIR="/opt/sdcc"
 
-# =============================================================================
-# GBDK 4.2.0 — built on top of patched sdcc
-# =============================================================================
 RUN git clone -b 4.2.0 https://github.com/gbdk-2020/gbdk-2020.git /tmp/gbdk-2020 && \
-    cd /tmp/gbdk-2020 && make -j$(nproc) && \
-    # Verify GBDK libs were built
-    ls -la build/gbdk/lib/gb/crt0.o && \
-    ls -la build/gbdk/lib/gb/gb.lib && \
+    cd /tmp/gbdk-2020 && \
+    make -j$(nproc) && \
+    # Verify critical files exist
+    test -f build/gbdk/lib/gb/crt0.o && \
+    test -f build/gbdk/lib/gb/gb.lib && \
+    echo "GBDK build OK" && \
     cp -R build/gbdk "${GBDK_PATH}" && \
     rm -rf /tmp/gbdk-2020
 

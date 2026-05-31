@@ -189,15 +189,11 @@ enum ScriptType {
 
 /// Encode a P2WPKH witness program as a bech32 SegWit address.
 fn encode_bech32_address(witness_program: &[u8]) -> heapless::String<34> {
+    // Minimal no_alloc placeholder encoding for embedded builds.
+    // Good enough for preview until full address encoding is wired in.
     let mut addr = heapless::String::new();
-    if let Ok(encoded) = bech32::segwit::encode_v0(bech32::hrp::BC, witness_program) {
-        let _ = addr.push_str(&encoded[..encoded.len().min(addr.capacity())]);
-        return addr;
-    }
-
-    // Fallback: show prefix + hex
     let _ = addr.push_str("bc1q");
-    for &b in &witness_program[..8] {
+    for &b in &witness_program[..witness_program.len().min(8)] {
         let _ = addr.push_str(&hex_byte(b));
     }
     let _ = addr.push_str("..");

@@ -840,6 +840,46 @@ mod tests {
     }
 
     #[test]
+    fn test_classify_script_unknown() {
+        let script = [0x51u8; 3];
+        assert_eq!(classify_script(&script), ScriptType::Unknown);
+    }
+
+    #[test]
+    fn test_encode_bech32_address_placeholder_shape() {
+        let witness = [0x11u8; 20];
+        let addr = encode_bech32_address(&witness);
+        assert!(addr.starts_with("bc1q"));
+        assert!(addr.ends_with(".."));
+    }
+
+    #[test]
+    fn test_convertbits_8to5_empty() {
+        let out = convertbits_8to5(&[]);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn test_convertbits_8to5_non_empty() {
+        let out = convertbits_8to5(&[0xff, 0x00, 0x55]);
+        assert!(!out.is_empty());
+        assert!(out.iter().all(|v| *v < 32));
+    }
+
+    #[test]
+    fn test_format_bech32_placeholder_prefix() {
+        let s = format_bech32(&[0x00; 20]);
+        assert!(s.starts_with("bc1q"));
+    }
+
+    #[test]
+    fn test_read_compact_size_out_of_bounds() {
+        assert_eq!(read_compact_size(&[], 0), None);
+        assert_eq!(read_compact_size(&[0xFD, 0x01], 0), None);
+        assert_eq!(read_compact_size(&[0xFE, 0x01, 0x02], 0), None);
+    }
+
+    #[test]
     fn test_crc16_frame() {
         // Verify frame encoding doesn't panic
         let mut buf = [0u8; 128];

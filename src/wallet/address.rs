@@ -76,3 +76,29 @@ pub enum AddressError {
     /// Key derivation failed.
     DerivationError,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_segwit_stub_returns_encoding_error() {
+        let pubkey = [0x02u8; 33];
+        let err = Address::native_segwit(&pubkey, Network::Mainnet).unwrap_err();
+        assert_eq!(err, AddressError::EncodingError);
+    }
+
+    #[test]
+    fn segwit_p2sh_stub_returns_encoding_error() {
+        let pubkey = [0x03u8; 33];
+        let err = Address::segwit_p2sh(&pubkey, Network::Testnet).unwrap_err();
+        assert_eq!(err, AddressError::EncodingError);
+    }
+
+    #[test]
+    fn legacy_stub_returns_encoding_error() {
+        let pubkey = [0x02u8; 33];
+        let err = Address::legacy(&pubkey, Network::Mainnet).unwrap_err();
+        assert_eq!(err, AddressError::EncodingError);
+    }
+}

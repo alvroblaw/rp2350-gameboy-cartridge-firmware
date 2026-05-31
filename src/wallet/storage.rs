@@ -237,4 +237,12 @@ mod tests {
         assert_eq!(SEED_EXTENSION, "sav");
         assert_eq!(SEED_DIR, "saves");
     }
+
+    #[test]
+    fn test_seed_constants_are_plausible() {
+        assert!(MAX_SEED_FILE_SIZE >= 64);
+        assert!(SEED_FILENAME.len() <= 8);
+        assert!(SEED_EXTENSION.len() <= 3);
+        assert!(!SEED_DIR.is_empty());
+    }
 }

@@ -15,9 +15,9 @@
 use crate::wallet::encrypt::{EncryptedSeed, PinEntry, PinRateLimiter, ZeroizingVec};
 use crate::wallet::bip32::{ExtendedPrivateKey, Network};
 use crate::wallet::bip39::Mnemonic;
-use crate::wallet::keys::KeySource;
 
 /// Wallet state.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, defmt::Format)]
 pub enum WalletStatus {
     /// No seed stored or loaded.
@@ -32,6 +32,7 @@ pub enum WalletStatus {
 ///
 /// Holds the decrypted seed and derived master key when unlocked.
 /// All sensitive data is zeroized on lock or drop.
+#[allow(dead_code)]
 pub struct WalletState {
     /// Current wallet status.
     status: WalletStatus,
@@ -47,6 +48,7 @@ pub struct WalletState {
     rate_limiter: PinRateLimiter,
 }
 
+#[allow(dead_code)]
 impl WalletState {
     /// Create a new wallet state in NoSeed mode.
     pub fn new(network: Network) -> Self {
@@ -67,7 +69,7 @@ impl WalletState {
 
     /// Get the Bitcoin network.
     pub fn network(&self) -> Network {
-        self.network
+        self.network.clone()
     }
 
     /// Check if the wallet is unlocked.
@@ -104,10 +106,10 @@ impl WalletState {
         let mnemonic = Mnemonic::generate(crate::wallet::bip39::WordCount::Words24)?;
 
         // Derive seed from mnemonic
-        let seed = mnemonic.to_seed();
+        let seed = mnemonic.to_seed("");
 
         // Encrypt seed with PIN
-        let encrypted = EncryptedSeed::encrypt(seed.as_slice(), pin)
+        let _encrypted = EncryptedSeed::encrypt(seed.as_slice(), pin)
             .map_err(WalletError::Encrypt)?;
 
         // Store the seed in memory (locked)
@@ -116,7 +118,7 @@ impl WalletState {
         self.seed = Some(zv);
 
         // Derive master key
-        let master = ExtendedPrivateKey::new_master(seed.as_slice(), self.network)?;
+        let master = ExtendedPrivateKey::new_master(seed.as_slice(), self.network.clone())?;
         self.master_key = Some(master);
 
         // Transition to unlocked
@@ -147,7 +149,7 @@ impl WalletState {
                 self.rate_limiter.record_success();
 
                 // Derive master key
-                let master = ExtendedPrivateKey::new_master(seed.as_slice(), self.network)?;
+                let master = ExtendedPrivateKey::new_master(seed.as_slice(), self.network.clone())?;
 
                 self.seed = Some(seed);
                 self.master_key = Some(master);
@@ -201,6 +203,7 @@ impl Drop for WalletState {
 }
 
 /// Wallet state errors.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, defmt::Format)]
 pub enum WalletError {
     /// Wallet already has a seed.
@@ -242,5 +245,115 @@ impl From<crate::wallet::bip39::Bip39Error> for WalletError {
 impl From<crate::wallet::bip32::Bip32Error> for WalletError {
     fn from(_: crate::wallet::bip32::Bip32Error) -> Self {
         WalletError::KeyDerivation
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::wallet::encrypt::EncryptedSeed;
+
+    #[test]
+    fn new_wallet_starts_without_seed() {
+        let wallet = WalletState::new(Network::Mainnet);
+        assert_eq!(wallet.status(), WalletStatus::NoSeed);
+        assert!(!wallet.is_unlocked());
+        assert!(wallet.master_key().is_none());
+        assert!(wallet.seed().is_none());
+    }
+
+    #[test]
+    fn generate_seed_unlocks_wallet_and_populates_state() {
+        let mut wallet = WalletState::new(Network::Mainnet);
+        let words = wallet.generate_seed("1234").unwrap();
+
+        assert_eq!(words.len(), 24);
+        assert_eq!(wallet.status(), WalletStatus::Unlocked);
+        assert!(wallet.is_unlocked());
+        assert!(wallet.master_key().is_some());
+        assert!(wallet.seed().is_some());
+    }
+
+    #[test]
+    fn generate_seed_rejects_reinitialization() {
+        let mut wallet = WalletState::new(Network::Mainnet);
+        wallet.generate_seed("1234").unwrap();
+        assert_eq!(wallet.generate_seed("1234"), Err(WalletError::AlreadyInitialized));
+    }
+
+    #[test]
+    fn lock_clears_sensitive_material_but_keeps_locked_state() {
+        let mut wallet = WalletState::new(Network::Mainnet);
+        wallet.generate_seed("1234").unwrap();
+        wallet.lock();
+
+        assert_eq!(wallet.status(), WalletStatus::Locked);
+        assert!(!wallet.is_unlocked());
+        assert!(wallet.master_key().is_none());
+        assert!(wallet.seed().is_none());
+    }
+
+    #[test]
+    fn wipe_resets_wallet_to_no_seed() {
+        let mut wallet = WalletState::new(Network::Mainnet);
+        wallet.generate_seed("1234").unwrap();
+        wallet.wipe();
+
+        assert_eq!(wallet.status(), WalletStatus::NoSeed);
+        assert!(wallet.master_key().is_none());
+        assert!(wallet.seed().is_none());
+    }
+
+    #[test]
+    fn unlock_restores_seed_and_master_key() {
+        let seed = [0x11u8; 64];
+        let encrypted = EncryptedSeed::encrypt(&seed, "1234").unwrap();
+        let mut wallet = WalletState::new(Network::Mainnet);
+        wallet.status = WalletStatus::Locked;
+
+        wallet.unlock("1234", &encrypted).unwrap();
+
+        assert_eq!(wallet.status(), WalletStatus::Unlocked);
+        assert!(wallet.master_key().is_some());
+        assert_eq!(wallet.seed().unwrap(), &seed[..]);
+    }
+
+    #[test]
+    fn unlock_rejects_wrong_pin() {
+        let seed = [0x22u8; 64];
+        let encrypted = EncryptedSeed::encrypt(&seed, "1234").unwrap();
+        let mut wallet = WalletState::new(Network::Mainnet);
+        wallet.status = WalletStatus::Locked;
+
+        assert_eq!(wallet.unlock("9999", &encrypted), Err(WalletError::WrongPin));
+        assert_eq!(wallet.status(), WalletStatus::Locked);
+        assert!(wallet.master_key().is_none());
+        assert!(wallet.seed().is_none());
+    }
+
+    #[test]
+    fn unlock_requires_locked_state() {
+        let seed = [0x33u8; 64];
+        let encrypted = EncryptedSeed::encrypt(&seed, "1234").unwrap();
+        let mut wallet = WalletState::new(Network::Mainnet);
+
+        assert_eq!(wallet.unlock("1234", &encrypted), Err(WalletError::NotLocked));
+    }
+
+    #[test]
+    fn rate_limiter_escalates_and_offers_wipe() {
+        let mut wallet = WalletState::new(Network::Mainnet);
+
+        assert_eq!(wallet.record_pin_failure(0), 1_000);
+        assert_eq!(wallet.record_pin_failure(100), 1_000);
+        assert_eq!(wallet.record_pin_failure(200), 30_000);
+        assert!(wallet.is_locked_out(201));
+        assert!(!wallet.should_offer_wipe());
+
+        for i in 3..10 {
+            let _ = wallet.record_pin_failure(1_000 + i as u64);
+        }
+
+        assert!(wallet.should_offer_wipe());
     }
 }

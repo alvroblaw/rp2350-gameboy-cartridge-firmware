@@ -370,7 +370,11 @@ impl UsbWalletProtocol {
         // Parse TX preview from PSBT
         match crate::wallet::psbt::PsbtParser::parse_preview(psbt_data) {
             Ok(preview) => {
-                self.tx_preview = preview;
+                self.tx_preview = TxPreview {
+                    destination: preview.destination,
+                    amount_sats: preview.amount_sats,
+                    fee_sats: preview.fee_sats,
+                };
                 self.state = SigningState::AwaitingConfirmation;
 
                 // Build NEED_CONFIRM response payload:
@@ -507,21 +511,23 @@ pub enum PsbtSignError {
 ///
 /// Wraps embassy-usb CDC-ACM to provide read/write of protocol frames.
 /// This is designed to be used as an embassy task.
-pub struct UsbSerial<'d> {
+#[cfg(feature = "embedded")]
+pub struct UsbSerial<'d, D: embassy_usb::driver::Driver<'d>> {
     /// Inner CDC-ACM interface.
-    inner: embassy_usb::class::cdc_acm::CdcAcmClass<'d, crate::MyUsbDriver>,
+    inner: embassy_usb::class::cdc_acm::CdcAcmClass<'d, D>,
 }
 
-impl<'d> UsbSerial<'d> {
+#[cfg(feature = "embedded")]
+impl<'d, D: embassy_usb::driver::Driver<'d>> UsbSerial<'d, D> {
     /// Create a new USB serial wrapper.
     pub fn new(
-        cdc: embassy_usb::class::cdc_acm::CdcAcmClass<'d, crate::MyUsbDriver>,
+        cdc: embassy_usb::class::cdc_acm::CdcAcmClass<'d, D>,
     ) -> Self {
         Self { inner: cdc }
     }
 
     /// Get a mutable reference to the inner CDC-ACM class.
-    pub fn inner_mut(&mut self) -> &mut embassy_usb::class::cdc_acm::CdcAcmClass<'d, crate::MyUsbDriver> {
+    pub fn inner_mut(&mut self) -> &mut embassy_usb::class::cdc_acm::CdcAcmClass<'d, D> {
         &mut self.inner
     }
 }
@@ -539,6 +545,8 @@ pub struct FrameReader {
     buf: [u8; HDR + MAX_PAYLOAD + CRC_SZ],
     /// Current write position.
     pos: usize,
+    /// Bytes already returned to caller but not yet compacted.
+    consumed: usize,
 }
 
 impl FrameReader {
@@ -547,12 +555,14 @@ impl FrameReader {
         Self {
             buf: [0u8; HDR + MAX_PAYLOAD + CRC_SZ],
             pos: 0,
+            consumed: 0,
         }
     }
 
     /// Reset internal state.
     pub fn reset(&mut self) {
         self.pos = 0;
+        self.consumed = 0;
     }
 
     /// Feed bytes from USB serial into the reader.
@@ -560,6 +570,16 @@ impl FrameReader {
     /// Returns `Some((cmd, payload_range))` when a complete frame is available.
     /// The returned range indexes into the internal buffer.
     pub fn feed(&mut self, data: &[u8]) -> Option<(u8, core::ops::Range<usize>)> {
+        // Compact buffer if a previous frame was returned.
+        if self.consumed > 0 {
+            let remaining = self.pos.saturating_sub(self.consumed);
+            if remaining > 0 {
+                self.buf.copy_within(self.consumed..self.pos, 0);
+            }
+            self.pos = remaining;
+            self.consumed = 0;
+        }
+
         // Copy incoming data
         let space = self.buf.len() - self.pos;
         let to_copy = data.len().min(space);
@@ -613,12 +633,9 @@ impl FrameReader {
             return None;
         }
 
-        // Consume the frame: shift remaining bytes
-        let remaining = self.pos - total;
-        if remaining > 0 {
-            self.buf.copy_within(total..self.pos, 0);
-        }
-        self.pos = remaining;
+        // Defer compaction until the next feed() call so the returned range
+        // remains valid for the caller.
+        self.consumed = total;
 
         Some((cmd, payload_range))
     }

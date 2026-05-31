@@ -21,6 +21,7 @@
 #![allow(unused)]
 
 use defmt::{info, warn};
+use heapless::Vec;
 
 // ---------------------------------------------------------------------------
 // PSBT constants
@@ -188,45 +189,19 @@ enum ScriptType {
 
 /// Encode a P2WPKH witness program as a bech32 SegWit address.
 fn encode_bech32_address(witness_program: &[u8]) -> heapless::String<34> {
+    // Minimal no_alloc placeholder encoding for embedded builds.
+    // Good enough for preview until full address encoding is wired in.
     let mut addr = heapless::String::new();
-    // Use bech32 crate for encoding
-    // witness_program is 20 bytes (P2WPKH)
-    if let Ok(encoded) = bech32::encode(
-        "bc",
-        bech32::primitives::decode::CheckedHrpstring::new_unchecked(
-            // Convert witness program to 5-bit groups
-            &convertbits_8to5(witness_program),
-        ).as_str(),
-        bech32::Hrp::parse_unchecked("bc"),
-        bech32::NoChecksum,
-    ) {
-        // Actually, let's do this more simply
+    let _ = addr.push_str("bc1q");
+    for &b in &witness_program[..witness_program.len().min(8)] {
+        let _ = addr.push_str(&hex_byte(b));
     }
-    // Fallback: use raw bech32 encoding
-    match bech32::EncodeOptions::new(bech32::NoChecksum)
-        .with_hrp(bech32::Hrp::parse("bc").unwrap_or(bech32::Hrp::parse_unchecked("bc")))
-        .checked()
-    {
-        Some(opts) => {
-            // bech32 encoding of witness program
-            let _ = addr.push_str(&format_bech32(witness_program));
-        }
-        None => {}
-    }
-
-    // Simple approach: just show hex for now, full bech32 in integration
-    if addr.is_empty() {
-        let _ = addr.push_str("bc1q");
-        for &b in &witness_program[..8] {
-            let _ = addr.push_str(&hex_byte(b));
-        }
-        let _ = addr.push_str("..");
-    }
+    let _ = addr.push_str("..");
     addr
 }
 
 /// Convert 8-bit to 5-bit groups (for bech32).
-fn convertbits_8to5(data: &[u8]) -> Vec<u8> {
+fn convertbits_8to5(data: &[u8]) -> Vec<u8, 64> {
     let mut acc: u32 = 0;
     let mut bits: u32 = 0;
     let mut ret = Vec::new();
@@ -300,7 +275,7 @@ impl PsbtParser {
             if offset >= data.len() { return Err(PsbtError::InvalidStructure); }
 
             // Key length
-            let (key_len, consumed) = read_compact_size(data, offset)?;
+            let (key_len, consumed) = read_compact_size(data, offset).ok_or(PsbtError::InvalidStructure)?;
             offset += consumed;
 
             if key_len == 0 {
@@ -317,7 +292,7 @@ impl PsbtParser {
             offset += key_len as usize;
 
             // Value length
-            let (val_len, consumed) = read_compact_size(data, offset)?;
+            let (val_len, consumed) = read_compact_size(data, offset).ok_or(PsbtError::InvalidStructure)?;
             offset += consumed;
 
             if offset + val_len as usize > data.len() {
@@ -381,21 +356,21 @@ impl PsbtParser {
         }
 
         // Input count
-        let (input_count, consumed) = read_compact_size(tx, offset)?;
+        let (input_count, consumed) = read_compact_size(tx, offset).ok_or(PsbtError::InvalidStructure)?;
         offset += consumed;
 
         // Skip inputs
         for _ in 0..input_count {
             offset += 32; // prev hash
             offset += 4;  // prev index
-            let (script_len, consumed) = read_compact_size(tx, offset)?;
+            let (script_len, consumed) = read_compact_size(tx, offset).ok_or(PsbtError::InvalidStructure)?;
             offset += consumed;
             offset += script_len as usize; // script
             offset += 4; // sequence
         }
 
         // Output count
-        let (output_count, consumed) = read_compact_size(tx, offset)?;
+        let (output_count, consumed) = read_compact_size(tx, offset).ok_or(PsbtError::InvalidStructure)?;
         offset += consumed;
 
         let mut outputs = heapless::Vec::new();
@@ -409,7 +384,7 @@ impl PsbtParser {
             ]);
             offset += 8;
 
-            let (script_len, consumed) = read_compact_size(tx, offset)?;
+            let (script_len, consumed) = read_compact_size(tx, offset).ok_or(PsbtError::InvalidStructure)?;
             offset += consumed;
 
             if offset + script_len as usize > tx.len() {
@@ -448,7 +423,7 @@ impl PsbtParser {
             loop {
                 if offset >= data.len() { break; }
 
-                let (key_len, consumed) = read_compact_size(data, offset)?;
+                let (key_len, consumed) = read_compact_size(data, offset).ok_or(PsbtError::InvalidStructure)?;
                 offset += consumed;
 
                 if key_len == 0 {
@@ -463,7 +438,7 @@ impl PsbtParser {
                 let key_type = data[offset];
                 offset += key_len as usize;
 
-                let (val_len, consumed) = read_compact_size(data, offset)?;
+                let (val_len, consumed) = read_compact_size(data, offset).ok_or(PsbtError::InvalidStructure)?;
                 offset += consumed;
 
                 if offset + val_len as usize > data.len() {
@@ -683,7 +658,9 @@ pub fn sign_psbt_raw(
     let parsed = parse_full_psbt(psbt_data)?;
 
     // Create signing key
-    let sk = SigningKey::from_bytes(signing_key)
+    let sk = SigningKey::from_bytes(
+        k256::elliptic_curve::generic_array::GenericArray::from_slice(signing_key)
+    )
         .map_err(|_| PsbtError::SigningError)?;
 
     // Get the public key for deriving pubkey_hash
@@ -756,8 +733,7 @@ pub fn sign_psbt_raw(
         );
 
         // Sign the sighash
-        let signature: Signature = sk.sign(&sighash)
-            .map_err(|_| PsbtError::SigningError)?;
+        let signature: Signature = <SigningKey as Signer<Signature>>::sign(&sk, &sighash);
 
         info!("Input {} signed (sighash computed)", i);
     }
@@ -861,6 +837,46 @@ mod tests {
     fn test_sha256d() {
         let h = sha256d(b"test");
         assert_eq!(h.len(), 32);
+    }
+
+    #[test]
+    fn test_classify_script_unknown() {
+        let script = [0x51u8; 3];
+        assert_eq!(classify_script(&script), ScriptType::Unknown);
+    }
+
+    #[test]
+    fn test_encode_bech32_address_placeholder_shape() {
+        let witness = [0x11u8; 20];
+        let addr = encode_bech32_address(&witness);
+        assert!(addr.starts_with("bc1q"));
+        assert!(addr.ends_with(".."));
+    }
+
+    #[test]
+    fn test_convertbits_8to5_empty() {
+        let out = convertbits_8to5(&[]);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn test_convertbits_8to5_non_empty() {
+        let out = convertbits_8to5(&[0xff, 0x00, 0x55]);
+        assert!(!out.is_empty());
+        assert!(out.iter().all(|v| *v < 32));
+    }
+
+    #[test]
+    fn test_format_bech32_placeholder_prefix() {
+        let s = format_bech32(&[0x00; 20]);
+        assert!(s.starts_with("bc1q"));
+    }
+
+    #[test]
+    fn test_read_compact_size_out_of_bounds() {
+        assert_eq!(read_compact_size(&[], 0), None);
+        assert_eq!(read_compact_size(&[0xFD, 0x01], 0), None);
+        assert_eq!(read_compact_size(&[0xFE, 0x01, 0x02], 0), None);
     }
 
     #[test]

@@ -11,6 +11,8 @@
 
 use hmac::{Hmac, Mac};
 use k256::elliptic_curve::sec1::ToEncodedPoint;
+use k256::elliptic_curve::group::prime::PrimeCurveAffine;
+use k256::elliptic_curve::PrimeField;
 use k256::{AffinePoint, ProjectivePoint, Scalar, Secp256k1};
 use sha2::{Digest, Sha256, Sha512};
 use zeroize::Zeroize;
@@ -71,12 +73,7 @@ pub struct ExtendedPrivKey {
 
 /// Try to parse a scalar from 32 bytes. Returns None if invalid (zero or >= order).
 fn try_scalar(bytes: &[u8; 32]) -> Option<Scalar> {
-    use k256::elliptic_curve::ops::Reduce;
-    use k256::U256;
-    // Interpret as big-endian integer, reduce mod order
-    let uint = U256::from_be_bytes(*bytes);
-    let scalar = <Scalar as Reduce<U256>>::from_uint_reduce(uint);
-    // Check it's not zero (zero means invalid for our purposes)
+    let scalar = Scalar::from_repr((*bytes).into()).into_option()?;
     if bool::from(scalar.is_zero()) {
         None
     } else {
@@ -125,7 +122,7 @@ impl ExtendedPrivKey {
         let mut mac = HmacSha512::new_from_slice(b"Bitcoin seed")
             .map_err(|_| Bip32Error::HmacError)?;
         mac.update(seed);
-        let result = mac.finalize().into_code();
+        let result = mac.finalize().into_bytes();
 
         let mut secret_bytes = [0u8; 32];
         let mut chain_code = [0u8; 32];
@@ -166,7 +163,7 @@ impl ExtendedPrivKey {
         }
         mac.update(&index.to_be_bytes());
 
-        let result = mac.finalize().into_code();
+        let result = mac.finalize().into_bytes();
         let mut tweak_bytes = [0u8; 32];
         let mut child_chain = [0u8; 32];
         tweak_bytes.copy_from_slice(&result[..32]);
@@ -193,7 +190,7 @@ impl ExtendedPrivKey {
             depth: self.depth + 1,
             parent_fingerprint: self.fingerprint(),
             child_index: index,
-            network: self.network,
+            network: self.network.clone(),
         })
     }
 
@@ -247,7 +244,7 @@ impl ExtendedPrivKey {
             depth: self.depth,
             parent_fingerprint: self.parent_fingerprint,
             child_index: self.child_index,
-            network: self.network,
+            network: self.network.clone(),
         })
     }
 
@@ -334,7 +331,7 @@ impl ExtendedPubKey {
         mac.update(&self.compressed_bytes);
         mac.update(&index.to_be_bytes());
 
-        let result = mac.finalize().into_code();
+        let result = mac.finalize().into_bytes();
         let mut tweak_bytes = [0u8; 32];
         let mut child_chain = [0u8; 32];
         tweak_bytes.copy_from_slice(&result[..32]);
@@ -359,7 +356,7 @@ impl ExtendedPubKey {
                 fp
             },
             child_index: index,
-            network: self.network,
+            network: self.network.clone(),
         })
     }
 
@@ -444,7 +441,7 @@ pub mod paths {
 }
 
 /// Bitcoin network type for key serialization.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Zeroize)]
+#[derive(Debug, Clone, PartialEq, Eq, Zeroize)]
 #[zeroize(drop)]
 pub enum Network {
     /// Bitcoin mainnet (xpub/xprv version bytes).
@@ -533,8 +530,12 @@ pub fn double_sha256(data: &[u8]) -> [u8; 32] {
 pub fn base58check_encode(payload: &[u8]) -> heapless::String<112> {
     let checksum = &double_sha256(payload)[..4];
     let mut full = arrayvec::ArrayVec::<u8, 82>::new();
-    full.extend_from_slice(payload).unwrap();
-    full.extend_from_slice(checksum).unwrap();
+    for &b in payload {
+        full.try_push(b).unwrap();
+    }
+    for &b in checksum {
+        full.try_push(b).unwrap();
+    }
 
     // Count leading zeros
     let leading_zeros = full.iter().take_while(|&&b| b == 0).count();
@@ -575,12 +576,13 @@ pub fn base58check_encode(payload: &[u8]) -> heapless::String<112> {
         }
     }
 
-    // Reverse chars and prepend to result
-    for &c in chars.iter().rev() {
-        result.insert(0, c as char).unwrap();
+    // Collect chars in reverse (which is forward order) then build string
+    let char_vec: heapless::Vec<char, 112> = chars.iter().rev().copied().map(|c| c as char).collect();
+    let mut s = heapless::String::<112>::new();
+    for c in char_vec {
+        s.push(c).unwrap();
     }
-
-    result
+    s
 }
 
 /// BIP-32 derivation errors.

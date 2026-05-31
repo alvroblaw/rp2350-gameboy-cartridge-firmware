@@ -18,7 +18,7 @@
 #![no_std]
 #![allow(unused)]
 
-use embedded_sdmmc::{DirEntry, ModeFlags, Volume, VolumeManager};
+use embedded_sdmmc::{Mode, Volume};
 use defmt::{info, warn, error};
 
 use crate::wallet::encrypt::{EncryptedSeed, EncryptError};
@@ -59,14 +59,22 @@ impl From<EncryptError> for StorageError {
 ///
 /// Handles reading and writing encrypted seed data to SD card.
 /// Parameterized over the volume manager type for testability.
-pub struct SeedStorage<'vol> {
+pub struct SeedStorage<'vol, D, T, const MAX_DIRS: usize, const MAX_FILES: usize, const MAX_VOLUMES: usize>
+where
+    D: embedded_sdmmc::BlockDevice,
+    T: embedded_sdmmc::TimeSource,
+{
     /// Reference to the SD card volume manager.
-    volume: Volume<'vol>,
+    volume: Volume<'vol, D, T, MAX_DIRS, MAX_FILES, MAX_VOLUMES>,
 }
 
-impl<'vol> SeedStorage<'vol> {
+impl<'vol, D, T, const MAX_DIRS: usize, const MAX_FILES: usize, const MAX_VOLUMES: usize> SeedStorage<'vol, D, T, MAX_DIRS, MAX_FILES, MAX_VOLUMES>
+where
+    D: embedded_sdmmc::BlockDevice,
+    T: embedded_sdmmc::TimeSource,
+{
     /// Create a new seed storage from an open volume.
-    pub fn new(volume: Volume<'vol>) -> Self {
+    pub fn new(volume: Volume<'vol, D, T, MAX_DIRS, MAX_FILES, MAX_VOLUMES>) -> Self {
         Self { volume }
     }
 
@@ -83,16 +91,14 @@ impl<'vol> SeedStorage<'vol> {
         // Try to open/create the saves directory
         let dir_exists = root_dir.open_dir(SEED_DIR).is_ok();
         if !dir_exists {
-            root_dir.create_dir(SEED_DIR).map_err(|_| StorageError::FsError)?;
+            root_dir.make_dir_in_dir(SEED_DIR).map_err(|_| StorageError::FsError)?;
         }
 
+        let mut saves_dir = root_dir.open_dir(SEED_DIR).map_err(|_| StorageError::FsError)?;
+
         // Open (or create) the seed file
-        let mut file = root_dir
-            .open_file_in_dir(
-                SEED_DIR,
-                SEED_FILENAME,
-                ModeFlags::CREATE_OR_TRUNCATE_WITH_WRITE,
-            )
+        let mut file = saves_dir
+            .open_file_in_dir(SEED_FILENAME, Mode::ReadWriteCreateOrTruncate)
             .map_err(|e| {
                 warn!("Failed to open seed file: {:?}", defmt::Debug2Format(&e));
                 StorageError::IoError
@@ -114,12 +120,10 @@ impl<'vol> SeedStorage<'vol> {
     pub fn load(&mut self) -> Result<EncryptedSeed, StorageError> {
         let mut root_dir = self.volume.open_root_dir().map_err(|_| StorageError::FsError)?;
 
-        let mut file = root_dir
-            .open_file_in_dir(
-                SEED_DIR,
-                SEED_FILENAME,
-                ModeFlags::READ_ONLY,
-            )
+        let mut saves_dir = root_dir.open_dir(SEED_DIR).map_err(|_| StorageError::NotFound)?;
+
+        let mut file = saves_dir
+            .open_file_in_dir(SEED_FILENAME, Mode::ReadOnly)
             .map_err(|e| {
                 warn!("Seed file not found: {:?}", defmt::Debug2Format(&e));
                 StorageError::NotFound
@@ -169,35 +173,34 @@ impl<'vol> SeedStorage<'vol> {
         let mut root_dir = self.volume.open_root_dir().map_err(|_| StorageError::FsError)?;
 
         // Open the file for overwriting
-        let file_result = root_dir.open_file_in_dir(
-            SEED_DIR,
-            SEED_FILENAME,
-            ModeFlags::WRITE_ONLY,
-        );
+        {
+            let mut saves_dir = root_dir.open_dir(SEED_DIR).map_err(|_| StorageError::NotFound)?;
+            let open_result = saves_dir.open_file_in_dir(SEED_FILENAME, Mode::ReadWriteTruncate);
+            if let Ok(mut file) = open_result {
+                // Pass 1: Overwrite with random data
+                let mut random_buf = [0u8; MAX_SEED_FILE_SIZE];
+                let _ = hardware_random(&mut random_buf);
+                let _ = file.write(&random_buf);
+                // Flush to ensure SD controller commits
+                let _ = file.seek_from_current(0);
 
-        if let Ok(mut file) = file_result {
-            // Pass 1: Overwrite with random data
-            let mut random_buf = [0u8; MAX_SEED_FILE_SIZE];
-            let _ = hardware_random(&mut random_buf);
-            let _ = file.write(&random_buf);
-            // Flush to ensure SD controller commits
-            let _ = file.seek_from_current(0);
+                // Pass 2: Different random data
+                let _ = hardware_random(&mut random_buf);
+                let _ = file.write(&random_buf);
+                let _ = file.seek_from_current(0);
 
-            // Pass 2: Different random data
-            let _ = hardware_random(&mut random_buf);
-            let _ = file.write(&random_buf);
-            let _ = file.seek_from_current(0);
+                // Pass 3: Final random data
+                let _ = hardware_random(&mut random_buf);
+                let _ = file.write(&random_buf);
 
-            // Pass 3: Final random data
-            let _ = hardware_random(&mut random_buf);
-            let _ = file.write(&random_buf);
-
-            info!("Seed file: 3-pass random overwrite complete");
-        }
+                info!("Seed file: 3-pass random overwrite complete");
+            }
+        };
 
         // Delete the file
-        root_dir
-            .delete_file_in_dir(SEED_DIR, SEED_FILENAME)
+        let mut saves_dir = root_dir.open_dir(SEED_DIR).map_err(|_| StorageError::NotFound)?;
+        saves_dir
+            .delete_file_in_dir(SEED_FILENAME)
             .map_err(|e| {
                 warn!("Failed to delete seed file: {:?}", defmt::Debug2Format(&e));
                 StorageError::IoError
@@ -209,15 +212,17 @@ impl<'vol> SeedStorage<'vol> {
 
     /// Check if a seed file exists on the SD card.
     pub fn has_seed(&mut self) -> bool {
-        let root_dir = match self.volume.open_root_dir() {
+        let mut root_dir = match self.volume.open_root_dir() {
             Ok(d) => d,
             Err(_) => return false,
         };
 
         // Try to open the file for reading
-        root_dir
-            .open_file_in_dir(SEED_DIR, SEED_FILENAME, ModeFlags::READ_ONLY)
-            .is_ok()
+        let exists = match root_dir.open_dir(SEED_DIR) {
+            Ok(mut saves_dir) => saves_dir.open_file_in_dir(SEED_FILENAME, Mode::ReadOnly).is_ok(),
+            Err(_) => false,
+        };
+        exists
     }
 }
 
@@ -231,5 +236,13 @@ mod tests {
         assert_eq!(SEED_FILENAME, "PKMN_BLUE");
         assert_eq!(SEED_EXTENSION, "sav");
         assert_eq!(SEED_DIR, "saves");
+    }
+
+    #[test]
+    fn test_seed_constants_are_plausible() {
+        assert!(MAX_SEED_FILE_SIZE >= 64);
+        assert!(SEED_FILENAME.len() <= 8);
+        assert!(SEED_EXTENSION.len() <= 3);
+        assert!(!SEED_DIR.is_empty());
     }
 }

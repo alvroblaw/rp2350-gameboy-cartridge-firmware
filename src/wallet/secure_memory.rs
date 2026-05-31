@@ -54,7 +54,7 @@ impl<T: Zeroize> SecureBox<T> {
     pub fn into_inner(mut self) -> T {
         // We do NOT zeroize here — the caller takes ownership.
         // Use core::mem::ManuallyDrop to skip our Drop impl.
-        let inner = core::ptr::read(&self.inner);
+        let inner = unsafe { core::ptr::read(&self.inner) };
         // Zeroize our copy (the one that would be dropped) to avoid
         // a double-reference to the same data.
         core::mem::forget(self);
@@ -107,7 +107,9 @@ impl<'a, T: Zeroize> SecureSlice<'a, T> {
 impl<'a, T: Zeroize> Drop for SecureSlice<'a, T> {
     #[inline]
     fn drop(&mut self) {
-        self.inner.zeroize();
+        for item in self.inner.iter_mut() {
+            item.zeroize();
+        }
     }
 }
 

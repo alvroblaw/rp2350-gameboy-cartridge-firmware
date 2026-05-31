@@ -173,25 +173,27 @@ where
         let mut root_dir = self.volume.open_root_dir().map_err(|_| StorageError::FsError)?;
 
         // Open the file for overwriting
-        let mut saves_dir = root_dir.open_dir(SEED_DIR).map_err(|_| StorageError::NotFound)?;
-        if let Ok(mut file) = saves_dir.open_file_in_dir(SEED_FILENAME, Mode::ReadWriteTruncate) {
-            // Pass 1: Overwrite with random data
-            let mut random_buf = [0u8; MAX_SEED_FILE_SIZE];
-            let _ = hardware_random(&mut random_buf);
-            let _ = file.write(&random_buf);
-            // Flush to ensure SD controller commits
-            let _ = file.seek_from_current(0);
+        {
+            let mut saves_dir = root_dir.open_dir(SEED_DIR).map_err(|_| StorageError::NotFound)?;
+            if let Ok(mut file) = saves_dir.open_file_in_dir(SEED_FILENAME, Mode::ReadWriteTruncate) {
+                // Pass 1: Overwrite with random data
+                let mut random_buf = [0u8; MAX_SEED_FILE_SIZE];
+                let _ = hardware_random(&mut random_buf);
+                let _ = file.write(&random_buf);
+                // Flush to ensure SD controller commits
+                let _ = file.seek_from_current(0);
 
-            // Pass 2: Different random data
-            let _ = hardware_random(&mut random_buf);
-            let _ = file.write(&random_buf);
-            let _ = file.seek_from_current(0);
+                // Pass 2: Different random data
+                let _ = hardware_random(&mut random_buf);
+                let _ = file.write(&random_buf);
+                let _ = file.seek_from_current(0);
 
-            // Pass 3: Final random data
-            let _ = hardware_random(&mut random_buf);
-            let _ = file.write(&random_buf);
+                // Pass 3: Final random data
+                let _ = hardware_random(&mut random_buf);
+                let _ = file.write(&random_buf);
 
-            info!("Seed file: 3-pass random overwrite complete");
+                info!("Seed file: 3-pass random overwrite complete");
+            }
         }
 
         // Delete the file
@@ -215,10 +217,11 @@ where
         };
 
         // Try to open the file for reading
-        match root_dir.open_dir(SEED_DIR) {
+        let exists = match root_dir.open_dir(SEED_DIR) {
             Ok(mut saves_dir) => saves_dir.open_file_in_dir(SEED_FILENAME, Mode::ReadOnly).is_ok(),
             Err(_) => false,
-        }
+        };
+        exists
     }
 }
 

@@ -17,6 +17,7 @@ use crate::wallet::bip32::{ExtendedPrivateKey, Network};
 use crate::wallet::bip39::Mnemonic;
 
 /// Wallet state.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, defmt::Format)]
 pub enum WalletStatus {
     /// No seed stored or loaded.
@@ -31,6 +32,7 @@ pub enum WalletStatus {
 ///
 /// Holds the decrypted seed and derived master key when unlocked.
 /// All sensitive data is zeroized on lock or drop.
+#[allow(dead_code)]
 pub struct WalletState {
     /// Current wallet status.
     status: WalletStatus,
@@ -46,6 +48,7 @@ pub struct WalletState {
     rate_limiter: PinRateLimiter,
 }
 
+#[allow(dead_code)]
 impl WalletState {
     /// Create a new wallet state in NoSeed mode.
     pub fn new(network: Network) -> Self {
@@ -200,6 +203,7 @@ impl Drop for WalletState {
 }
 
 /// Wallet state errors.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, defmt::Format)]
 pub enum WalletError {
     /// Wallet already has a seed.

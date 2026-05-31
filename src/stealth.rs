@@ -22,7 +22,6 @@ use crate::comm::gb_channel::{Command, Frame, GbChannel, ResponseCode};
 use crate::comm::usb_protocol::UsbWalletProtocol;
 use crate::ws2812_spi::Ws2812Led;
 
-use core::ptr;
 
 /// Minimum hold time (ms) to trigger stealth mode.
 /// Prevents accidental triggers from brief button presses during insertion.
@@ -197,7 +196,7 @@ pub async fn run_stealth_mode(
 /// Handlers are currently stubs that return `ResponseCode::Error`.
 fn dispatch_wallet_command(
     frame: &Frame,
-    usb_proto: &mut UsbWalletProtocol,
+    _usb_proto: &mut UsbWalletProtocol,
 ) -> Result<(ResponseCode, &'static [u8]), ResponseCode> {
     let cmd = frame.command().ok_or(ResponseCode::InvalidCommand)?;
 

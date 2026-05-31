@@ -8,9 +8,9 @@ pub mod gb_channel;
 pub mod usb_protocol;
 
 // Re-export the primary types from gb_channel for convenience.
+#[allow(unused_imports)]
 pub use gb_channel::{
-    ChannelError, Command, Frame, GbChannel, ResponseCode,
-    MAX_PAYLOAD_SIZE, CMD_REGION_ADDR, RSP_REGION_ADDR, STATUS_BYTE_ADDR,
-    EXT_PAYLOAD_ADDR, FRAME_MAGIC,
-    crc16_ccitt,
+    crc16_ccitt, ChannelError, Command, Frame, GbChannel, ResponseCode,
+    CMD_REGION_ADDR, EXT_PAYLOAD_ADDR, FRAME_MAGIC, MAX_PAYLOAD_SIZE,
+    RSP_REGION_ADDR, STATUS_BYTE_ADDR,
 };

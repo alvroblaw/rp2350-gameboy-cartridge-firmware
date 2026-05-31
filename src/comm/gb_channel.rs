@@ -68,7 +68,9 @@ const FRAME_OVERHEAD: usize = FRAME_HEADER_SIZE + FRAME_CRC_SIZE;
 // Status byte bits
 const STATUS_CMD_PENDING: u8 = 0x01;
 const STATUS_RSP_READY: u8 = 0x02;
+#[allow(dead_code)]
 const STATUS_ERROR: u8 = 0x04;
+#[allow(dead_code)]
 const STATUS_BUSY: u8 = 0x08;
 
 // ---------------------------------------------------------------------------
@@ -121,6 +123,7 @@ impl Command {
 }
 
 /// Wallet protocol response codes (sent from RP2350 to GB ROM).
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, defmt::Format)]
 #[repr(u8)]
 pub enum ResponseCode {
@@ -142,6 +145,7 @@ pub enum ResponseCode {
     ChecksumError = 0x07,
 }
 
+#[allow(dead_code)]
 impl ResponseCode {
     /// Check if this code represents success.
     pub fn is_ok(self) -> bool {
@@ -378,6 +382,7 @@ impl GbChannel {
     }
 
     /// Check if a response is ready for the GB ROM to read.
+    #[allow(dead_code)]
     pub fn has_response(&self) -> bool {
         (self.read_status() & STATUS_RSP_READY) != 0
     }
@@ -478,6 +483,7 @@ impl GbChannel {
     }
 
     /// Clear the response-ready flag.
+    #[allow(dead_code)]
     pub fn clear_response(&self) {
         let status = self.read_status();
         self.write_status(status & !STATUS_RSP_READY);
@@ -522,6 +528,7 @@ impl GbChannel {
 
 /// Channel errors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, defmt::Format)]
+#[allow(dead_code)]
 pub enum ChannelError {
     /// No command is currently pending.
     NoCommandPending,

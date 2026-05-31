@@ -84,21 +84,21 @@ mod tests {
     #[test]
     fn native_segwit_stub_returns_encoding_error() {
         let pubkey = [0x02u8; 33];
-        let err = Address::native_segwit(&pubkey, Network::Mainnet).unwrap_err();
-        assert_eq!(err, AddressError::EncodingError);
+        let result = Address::native_segwit(&pubkey, Network::Mainnet);
+        assert!(matches!(result, Err(AddressError::EncodingError)));
     }
 
     #[test]
     fn segwit_p2sh_stub_returns_encoding_error() {
         let pubkey = [0x03u8; 33];
-        let err = Address::segwit_p2sh(&pubkey, Network::Testnet).unwrap_err();
-        assert_eq!(err, AddressError::EncodingError);
+        let result = Address::segwit_p2sh(&pubkey, Network::Testnet);
+        assert!(matches!(result, Err(AddressError::EncodingError)));
     }
 
     #[test]
     fn legacy_stub_returns_encoding_error() {
         let pubkey = [0x02u8; 33];
-        let err = Address::legacy(&pubkey, Network::Mainnet).unwrap_err();
-        assert_eq!(err, AddressError::EncodingError);
+        let result = Address::legacy(&pubkey, Network::Mainnet);
+        assert!(matches!(result, Err(AddressError::EncodingError)));
     }
 }

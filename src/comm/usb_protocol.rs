@@ -512,22 +512,22 @@ pub enum PsbtSignError {
 /// Wraps embassy-usb CDC-ACM to provide read/write of protocol frames.
 /// This is designed to be used as an embassy task.
 #[cfg(feature = "embedded")]
-pub struct UsbSerial<'d> {
+pub struct UsbSerial<'d, D: embassy_usb::driver::Driver<'d>> {
     /// Inner CDC-ACM interface.
-    inner: embassy_usb::class::cdc_acm::CdcAcmClass<'d, crate::MyUsbDriver>,
+    inner: embassy_usb::class::cdc_acm::CdcAcmClass<'d, D>,
 }
 
 #[cfg(feature = "embedded")]
-impl<'d> UsbSerial<'d> {
+impl<'d, D: embassy_usb::driver::Driver<'d>> UsbSerial<'d, D> {
     /// Create a new USB serial wrapper.
     pub fn new(
-        cdc: embassy_usb::class::cdc_acm::CdcAcmClass<'d, crate::MyUsbDriver>,
+        cdc: embassy_usb::class::cdc_acm::CdcAcmClass<'d, D>,
     ) -> Self {
         Self { inner: cdc }
     }
 
     /// Get a mutable reference to the inner CDC-ACM class.
-    pub fn inner_mut(&mut self) -> &mut embassy_usb::class::cdc_acm::CdcAcmClass<'d, crate::MyUsbDriver> {
+    pub fn inner_mut(&mut self) -> &mut embassy_usb::class::cdc_acm::CdcAcmClass<'d, D> {
         &mut self.inner
     }
 }

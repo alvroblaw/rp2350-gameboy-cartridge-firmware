@@ -18,7 +18,7 @@
 #![no_std]
 #![allow(unused)]
 
-use embedded_sdmmc::{DirEntry, ModeFlags, Volume, VolumeManager};
+use embedded_sdmmc::{Mode, Volume};
 use defmt::{info, warn, error};
 
 use crate::wallet::encrypt::{EncryptedSeed, EncryptError};
@@ -59,14 +59,22 @@ impl From<EncryptError> for StorageError {
 ///
 /// Handles reading and writing encrypted seed data to SD card.
 /// Parameterized over the volume manager type for testability.
-pub struct SeedStorage<'vol> {
+pub struct SeedStorage<'vol, D, T, const MAX_DIRS: usize, const MAX_FILES: usize, const MAX_VOLUMES: usize>
+where
+    D: embedded_sdmmc::BlockDevice,
+    T: embedded_sdmmc::TimeSource,
+{
     /// Reference to the SD card volume manager.
-    volume: Volume<'vol>,
+    volume: Volume<'vol, D, T, MAX_DIRS, MAX_FILES, MAX_VOLUMES>,
 }
 
-impl<'vol> SeedStorage<'vol> {
+impl<'vol, D, T, const MAX_DIRS: usize, const MAX_FILES: usize, const MAX_VOLUMES: usize> SeedStorage<'vol, D, T, MAX_DIRS, MAX_FILES, MAX_VOLUMES>
+where
+    D: embedded_sdmmc::BlockDevice,
+    T: embedded_sdmmc::TimeSource,
+{
     /// Create a new seed storage from an open volume.
-    pub fn new(volume: Volume<'vol>) -> Self {
+    pub fn new(volume: Volume<'vol, D, T, MAX_DIRS, MAX_FILES, MAX_VOLUMES>) -> Self {
         Self { volume }
     }
 
@@ -83,16 +91,14 @@ impl<'vol> SeedStorage<'vol> {
         // Try to open/create the saves directory
         let dir_exists = root_dir.open_dir(SEED_DIR).is_ok();
         if !dir_exists {
-            root_dir.create_dir(SEED_DIR).map_err(|_| StorageError::FsError)?;
+            root_dir.make_dir_in_dir(SEED_DIR).map_err(|_| StorageError::FsError)?;
         }
 
+        let mut saves_dir = root_dir.open_dir(SEED_DIR).map_err(|_| StorageError::FsError)?;
+
         // Open (or create) the seed file
-        let mut file = root_dir
-            .open_file_in_dir(
-                SEED_DIR,
-                SEED_FILENAME,
-                ModeFlags::CREATE_OR_TRUNCATE_WITH_WRITE,
-            )
+        let mut file = saves_dir
+            .open_file_in_dir(SEED_FILENAME, Mode::ReadWriteCreateOrTruncate)
             .map_err(|e| {
                 warn!("Failed to open seed file: {:?}", defmt::Debug2Format(&e));
                 StorageError::IoError
@@ -114,12 +120,10 @@ impl<'vol> SeedStorage<'vol> {
     pub fn load(&mut self) -> Result<EncryptedSeed, StorageError> {
         let mut root_dir = self.volume.open_root_dir().map_err(|_| StorageError::FsError)?;
 
-        let mut file = root_dir
-            .open_file_in_dir(
-                SEED_DIR,
-                SEED_FILENAME,
-                ModeFlags::READ_ONLY,
-            )
+        let mut saves_dir = root_dir.open_dir(SEED_DIR).map_err(|_| StorageError::NotFound)?;
+
+        let mut file = saves_dir
+            .open_file_in_dir(SEED_FILENAME, Mode::ReadOnly)
             .map_err(|e| {
                 warn!("Seed file not found: {:?}", defmt::Debug2Format(&e));
                 StorageError::NotFound
@@ -169,11 +173,10 @@ impl<'vol> SeedStorage<'vol> {
         let mut root_dir = self.volume.open_root_dir().map_err(|_| StorageError::FsError)?;
 
         // Open the file for overwriting
-        let file_result = root_dir.open_file_in_dir(
-            SEED_DIR,
-            SEED_FILENAME,
-            ModeFlags::WRITE_ONLY,
-        );
+        let file_result = match root_dir.open_dir(SEED_DIR) {
+            Ok(mut saves_dir) => saves_dir.open_file_in_dir(SEED_FILENAME, Mode::ReadWriteTruncate),
+            Err(_) => return Err(StorageError::NotFound),
+        };
 
         if let Ok(mut file) = file_result {
             // Pass 1: Overwrite with random data
@@ -196,8 +199,9 @@ impl<'vol> SeedStorage<'vol> {
         }
 
         // Delete the file
-        root_dir
-            .delete_file_in_dir(SEED_DIR, SEED_FILENAME)
+        let mut saves_dir = root_dir.open_dir(SEED_DIR).map_err(|_| StorageError::NotFound)?;
+        saves_dir
+            .delete_file_in_dir(SEED_FILENAME)
             .map_err(|e| {
                 warn!("Failed to delete seed file: {:?}", defmt::Debug2Format(&e));
                 StorageError::IoError
@@ -215,9 +219,10 @@ impl<'vol> SeedStorage<'vol> {
         };
 
         // Try to open the file for reading
-        root_dir
-            .open_file_in_dir(SEED_DIR, SEED_FILENAME, ModeFlags::READ_ONLY)
-            .is_ok()
+        match root_dir.open_dir(SEED_DIR) {
+            Ok(mut saves_dir) => saves_dir.open_file_in_dir(SEED_FILENAME, Mode::ReadOnly).is_ok(),
+            Err(_) => false,
+        }
     }
 }
 

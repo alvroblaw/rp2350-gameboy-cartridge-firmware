@@ -21,6 +21,7 @@
 #![allow(unused)]
 
 use defmt::{info, warn};
+use heapless::Vec;
 
 // ---------------------------------------------------------------------------
 // PSBT constants

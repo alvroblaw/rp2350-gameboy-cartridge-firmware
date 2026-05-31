@@ -265,6 +265,42 @@ where
                         match data {
                             42 => {
                                 let game_name_mem = &mut self.gb_ram_memory[0x1000..0x1011];
+
+                                // Check if this is a wallet switch request
+                                let game_name_str = unsafe {
+                                    CStr::from_ptr(game_name_mem.as_ptr() as *const c_char)
+                                };
+                                let name = game_name_str.to_str().unwrap_or("");
+
+                                if name == "__WALLET__" {
+                                    info!("Wallet mode triggered from GB bootloader (Start+B)");
+
+                                    // Load wallet ROM into gb_rom_memory
+                                    let wallet_rom: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wallet.gb"));
+                                    let gb_rom_ptr: *mut u8 = self.gb_rom_memory.as_mut_ptr();
+                                    let gb_rom_slice = unsafe {
+                                        core::slice::from_raw_parts_mut(gb_rom_ptr, 64 * 1024)
+                                    };
+                                    gb_rom_slice.fill(0xFF);
+                                    let copy_len = wallet_rom.len().min(gb_rom_slice.len());
+                                    gb_rom_slice[..copy_len].copy_from_slice(&wallet_rom[..copy_len]);
+                                    info!("Wallet ROM loaded, resetting GB");
+
+                                    // Ack the command
+                                    shared_data.msg_id_rp_2_gb = shared_data.msg_id_gb_2_rp;
+
+                                    // Reset GB so it boots into the wallet ROM
+                                    let _ = self.reset_pin.set_low();
+                                    embassy_time::Timer::after(
+                                        embassy_time::Duration::from_millis(10),
+                                    ).await;
+                                    let _ = self.reset_pin.set_high();
+
+                                    // Enter wallet command loop (never returns)
+                                    let sram_base: *mut u8 = self.gb_ram_memory.as_mut_ptr();
+                                    crate::stealth::run_stealth_mode(self.led, sram_base).await;
+                                }
+
                                 info!("game_name_mem {}", game_name_mem);
                                 game_name_cstr = unsafe {
                                     CStr::from_ptr(game_name_mem.as_ptr() as *const c_char)

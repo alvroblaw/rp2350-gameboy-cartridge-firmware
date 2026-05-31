@@ -247,3 +247,113 @@ impl From<crate::wallet::bip32::Bip32Error> for WalletError {
         WalletError::KeyDerivation
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::wallet::encrypt::EncryptedSeed;
+
+    #[test]
+    fn new_wallet_starts_without_seed() {
+        let wallet = WalletState::new(Network::Mainnet);
+        assert_eq!(wallet.status(), WalletStatus::NoSeed);
+        assert!(!wallet.is_unlocked());
+        assert!(wallet.master_key().is_none());
+        assert!(wallet.seed().is_none());
+    }
+
+    #[test]
+    fn generate_seed_unlocks_wallet_and_populates_state() {
+        let mut wallet = WalletState::new(Network::Mainnet);
+        let words = wallet.generate_seed("1234").unwrap();
+
+        assert_eq!(words.len(), 24);
+        assert_eq!(wallet.status(), WalletStatus::Unlocked);
+        assert!(wallet.is_unlocked());
+        assert!(wallet.master_key().is_some());
+        assert!(wallet.seed().is_some());
+    }
+
+    #[test]
+    fn generate_seed_rejects_reinitialization() {
+        let mut wallet = WalletState::new(Network::Mainnet);
+        wallet.generate_seed("1234").unwrap();
+        assert_eq!(wallet.generate_seed("1234"), Err(WalletError::AlreadyInitialized));
+    }
+
+    #[test]
+    fn lock_clears_sensitive_material_but_keeps_locked_state() {
+        let mut wallet = WalletState::new(Network::Mainnet);
+        wallet.generate_seed("1234").unwrap();
+        wallet.lock();
+
+        assert_eq!(wallet.status(), WalletStatus::Locked);
+        assert!(!wallet.is_unlocked());
+        assert!(wallet.master_key().is_none());
+        assert!(wallet.seed().is_none());
+    }
+
+    #[test]
+    fn wipe_resets_wallet_to_no_seed() {
+        let mut wallet = WalletState::new(Network::Mainnet);
+        wallet.generate_seed("1234").unwrap();
+        wallet.wipe();
+
+        assert_eq!(wallet.status(), WalletStatus::NoSeed);
+        assert!(wallet.master_key().is_none());
+        assert!(wallet.seed().is_none());
+    }
+
+    #[test]
+    fn unlock_restores_seed_and_master_key() {
+        let seed = [0x11u8; 64];
+        let encrypted = EncryptedSeed::encrypt(&seed, "1234").unwrap();
+        let mut wallet = WalletState::new(Network::Mainnet);
+        wallet.status = WalletStatus::Locked;
+
+        wallet.unlock("1234", &encrypted).unwrap();
+
+        assert_eq!(wallet.status(), WalletStatus::Unlocked);
+        assert!(wallet.master_key().is_some());
+        assert_eq!(wallet.seed().unwrap(), &seed[..]);
+    }
+
+    #[test]
+    fn unlock_rejects_wrong_pin() {
+        let seed = [0x22u8; 64];
+        let encrypted = EncryptedSeed::encrypt(&seed, "1234").unwrap();
+        let mut wallet = WalletState::new(Network::Mainnet);
+        wallet.status = WalletStatus::Locked;
+
+        assert_eq!(wallet.unlock("9999", &encrypted), Err(WalletError::WrongPin));
+        assert_eq!(wallet.status(), WalletStatus::Locked);
+        assert!(wallet.master_key().is_none());
+        assert!(wallet.seed().is_none());
+    }
+
+    #[test]
+    fn unlock_requires_locked_state() {
+        let seed = [0x33u8; 64];
+        let encrypted = EncryptedSeed::encrypt(&seed, "1234").unwrap();
+        let mut wallet = WalletState::new(Network::Mainnet);
+
+        assert_eq!(wallet.unlock("1234", &encrypted), Err(WalletError::NotLocked));
+    }
+
+    #[test]
+    fn rate_limiter_escalates_and_offers_wipe() {
+        let mut wallet = WalletState::new(Network::Mainnet);
+
+        assert_eq!(wallet.record_pin_failure(0), 1_000);
+        assert_eq!(wallet.record_pin_failure(100), 1_000);
+        assert_eq!(wallet.record_pin_failure(200), 30_000);
+        assert!(wallet.is_locked_out(201));
+        assert!(!wallet.should_offer_wipe());
+
+        for i in 3..10 {
+            let _ = wallet.record_pin_failure(1_000 + i as u64);
+        }
+
+        assert!(wallet.should_offer_wipe());
+    }
+}

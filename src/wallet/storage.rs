@@ -175,7 +175,8 @@ where
         // Open the file for overwriting
         {
             let mut saves_dir = root_dir.open_dir(SEED_DIR).map_err(|_| StorageError::NotFound)?;
-            if let Ok(mut file) = saves_dir.open_file_in_dir(SEED_FILENAME, Mode::ReadWriteTruncate) {
+            let open_result = saves_dir.open_file_in_dir(SEED_FILENAME, Mode::ReadWriteTruncate);
+            if let Ok(mut file) = open_result {
                 // Pass 1: Overwrite with random data
                 let mut random_buf = [0u8; MAX_SEED_FILE_SIZE];
                 let _ = hardware_random(&mut random_buf);
@@ -194,7 +195,7 @@ where
 
                 info!("Seed file: 3-pass random overwrite complete");
             }
-        }
+        };
 
         // Delete the file
         let mut saves_dir = root_dir.open_dir(SEED_DIR).map_err(|_| StorageError::NotFound)?;

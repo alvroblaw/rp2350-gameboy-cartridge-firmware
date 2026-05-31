@@ -1,7 +1,6 @@
 {
-    "build": {
-        "dockerfile": "Dockerfile"
-    },
+    "image": "shilga/rp2350-croco-cartridge-devcontainer-rust:v0.3",
+    "runArgs": ["--platform=linux/amd64"],
     "name": "CrocoCartridge2DevContainer",
     "mounts": [
         "source=${localEnv:HOME}/.ssh,target=/root/.ssh,type=bind,consistency=cached"

@@ -72,13 +72,15 @@ RUN git clone --depth 1 --branch 2.1.1 \
 # This is the slow part (~10-20 min). Keeps its own layer for caching.
 # =============================================================================
 ARG GBDK_PATH=/usr/share/gbdk
+ARG SDCC_BUILD=/tmp/sdcc-build
 
-RUN svn checkout -q -r r14228 svn://svn.code.sf.net/p/sdcc/code/trunk /tmp/sdcc-r14228 && \
-    cd /tmp/sdcc-r14228/sdcc && \
+RUN svn checkout -q -r r14228 svn://svn.code.sf.net/p/sdcc/code/trunk ${SDCC_BUILD} && \
+    cd ${SDCC_BUILD}/sdcc && \
     curl -Lo gbdk-sdcc-patch-file \
         https://github.com/gbdk-2020/gbdk-2020-sdcc/releases/download/patches/gbdk-4.2-nes_banked_nonbanked_v4_combined.diff.patch && \
     patch -p0 -f < gbdk-sdcc-patch-file && \
     ./configure \
+        --prefix=/opt/sdcc \
         --disable-shared \
         --enable-gbz80-port --enable-z80-port --enable-mos6502-port --enable-mos65c02-port \
         --disable-mcs51-port --disable-z180-port --disable-r2k-port --disable-r2ka-port \
@@ -87,27 +89,25 @@ RUN svn checkout -q -r r14228 svn://svn.code.sf.net/p/sdcc/code/trunk /tmp/sdcc-
         --disable-hc08-port --disable-s08-port --disable-stm8-port --disable-pdk13-port \
         --disable-pdk14-port --disable-pdk15-port --disable-ucsim --disable-doc --disable-device-lib && \
     make -j$(nproc) && \
-    cp -f src/sdcc bin/ && \
-    cp -f support/sdbinutils/binutils/sdar bin/ && \
-    cp -f support/sdbinutils/binutils/sdranlib bin/ && \
-    cp -f support/sdbinutils/binutils/sdobjcopy bin/ && \
-    cp -f support/sdbinutils/binutils/sdnm bin/ && \
-    cp -f support/cpp/gcc/cc1 bin/ && \
-    cp -f support/cpp/gcc/cpp bin/sdcpp && \
-    strip bin/* || true && \
-    rm -f bin/*.in bin/Makefile bin/README && \
-    mkdir -p libexec/sdcc && \
-    mv bin/cc1 libexec/sdcc/ && \
-    echo "sdcc build complete"
+    make install && \
+    # Verify sdcc works
+    /opt/sdcc/bin/sdcc --version && \
+    rm -rf ${SDCC_BUILD}
+
+# Add sdcc to PATH so GBDK can find it
+ENV PATH="/opt/sdcc/bin:${PATH}"
+ENV SDCCDIR="/opt/sdcc"
 
 # =============================================================================
 # GBDK 4.2.0 — built on top of patched sdcc
 # =============================================================================
-RUN export SDCCDIR=/tmp/sdcc-r14228/sdcc && \
-    git clone -b 4.2.0 https://github.com/gbdk-2020/gbdk-2020.git /tmp/gbdk-2020 && \
+RUN git clone -b 4.2.0 https://github.com/gbdk-2020/gbdk-2020.git /tmp/gbdk-2020 && \
     cd /tmp/gbdk-2020 && make -j$(nproc) && \
+    # Verify GBDK libs were built
+    ls -la build/gbdk/lib/gb/crt0.o && \
+    ls -la build/gbdk/lib/gb/gb.lib && \
     cp -R build/gbdk "${GBDK_PATH}" && \
-    rm -rf /tmp/sdcc-r14228 /tmp/gbdk-2020
+    rm -rf /tmp/gbdk-2020
 
 ENV GBDK_PATH=${GBDK_PATH}
 

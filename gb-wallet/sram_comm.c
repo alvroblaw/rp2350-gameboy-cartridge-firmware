@@ -9,6 +9,7 @@
 
 #include "sram_comm.h"
 #include <string.h>
+#include <gb/gb.h>
 
 /* ---- Volatile SRAM access ---- */
 

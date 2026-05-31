@@ -1,15 +1,15 @@
 /* SPDX-License-Identifier: GPLv3 */
 /*!
  * @file font.c
- * @brief Compact 5x7 bitmap font for Game Boy wallet ROM.
+ * @brief Compact 5x8 bitmap font for Game Boy wallet ROM.
  *
  * Covers ASCII 32 (space) through 126 (~).
- * Each glyph is 7 bytes, one byte per row, 5 bits wide.
+ * Each glyph is 8 bytes max, one byte per row, 5 bits wide.
  * Bit 4 = leftmost pixel, bit 0 = rightmost pixel.
  */
 
 #include "font.h"
-#include <gbdk/font.h>
+#include <gb/gb.h>
 #include <string.h>
 
 /* 5x7 font glyphs — ASCII 32..126 */
@@ -114,13 +114,13 @@ const uint8_t font_glyphs[FONT_CHAR_COUNT][FONT_BYTES_PER_CHAR] = {
 /* Tile index where we load the font in VRAM */
 static uint8_t font_base_tile = 0;
 
-uint8_t font_load(uint8_t base_tile)
+uint8_t wallet_font_load(uint8_t base_tile)
 {
     font_base_tile = base_tile;
 
     /* Each character becomes one 8x8 tile.
-     * We fill the tile data row-by-row from the glyph (5 bits wide),
-     * then add 1 blank row at the bottom (row 7) and 3 blank columns (bits 0-2). */
+     * We fill the tile data row-by-row from the glyph (5 bits wide)
+     * and leave any missing rows zero-filled by the initializer. */
     for (uint16_t i = 0; i < FONT_CHAR_COUNT; i++) {
         uint8_t tile_data[16]; /* 8x8 tile = 16 bytes (2 bits per pixel, low + high byte per row) */
         for (uint8_t row = 0; row < 8; row++) {
@@ -128,7 +128,7 @@ uint8_t font_load(uint8_t base_tile)
             if (row < FONT_HEIGHT) {
                 glyph_row = font_glyphs[i][row];
             } else {
-                glyph_row = 0x00; /* blank bottom row */
+                glyph_row = 0x00;
             }
             /* Shift left 3 bits so character starts at bit 3 */
             uint8_t pixels = glyph_row << 3;
@@ -142,7 +142,7 @@ uint8_t font_load(uint8_t base_tile)
     return FONT_CHAR_COUNT;
 }
 
-uint8_t font_char_tile(char c, uint8_t base_tile)
+uint8_t wallet_font_char_tile(char c, uint8_t base_tile)
 {
     (void)base_tile;
     if (c < FONT_FIRST_CHAR || c > FONT_LAST_CHAR) {
@@ -151,38 +151,38 @@ uint8_t font_char_tile(char c, uint8_t base_tile)
     return font_base_tile + (uint8_t)(c - FONT_FIRST_CHAR);
 }
 
-void font_print(uint8_t x, uint8_t y, const char *str, uint8_t base_tile)
+void wallet_font_print(uint8_t x, uint8_t y, const char *str, uint8_t base_tile)
 {
     uint8_t tx = x;
     while (*str && tx < 20) {
-        uint8_t tile = font_char_tile(*str, base_tile);
+        uint8_t tile = wallet_font_char_tile(*str, base_tile);
         set_bkg_tile_xy(tx, y, tile);
         tx++;
         str++;
     }
 }
 
-void font_print_centered(uint8_t y, const char *str, uint8_t base_tile)
+void wallet_font_print_centered(uint8_t y, const char *str, uint8_t base_tile)
 {
     uint8_t len = 0;
     const char *s = str;
     while (*s) { len++; s++; }
     uint8_t x = len < 20 ? (20 - len) / 2 : 0;
-    font_print(x, y, str, base_tile);
+    wallet_font_print(x, y, str, base_tile);
 }
 
-void font_print_right(uint8_t x, uint8_t y, const char *str, uint8_t base_tile)
+void wallet_font_print_right(uint8_t x, uint8_t y, const char *str, uint8_t base_tile)
 {
     uint8_t len = 0;
     const char *s = str;
     while (*s) { len++; s++; }
     uint8_t start = x > len ? x - len : 0;
-    font_print(start, y, str, base_tile);
+    wallet_font_print(start, y, str, base_tile);
 }
 
-void font_clear_row(uint8_t y, uint8_t base_tile)
+void wallet_font_clear_row(uint8_t y, uint8_t base_tile)
 {
-    uint8_t space_tile = font_char_tile(' ', base_tile);
+    uint8_t space_tile = wallet_font_char_tile(' ', base_tile);
     for (uint8_t x = 0; x < 20; x++) {
         set_bkg_tile_xy(x, y, space_tile);
     }

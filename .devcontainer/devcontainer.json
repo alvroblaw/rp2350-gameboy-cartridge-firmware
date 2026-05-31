@@ -1,15 +1,21 @@
 {
-    "image": "shilga/rp2350-croco-cartridge-devcontainer-rust:v0.3",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
     "name": "CrocoCartridge2DevContainer",
     "mounts": [
-        "source=${localEnv:HOME}/.ssh,target=/root/.ssh,type=bind,consistency=cached",
-      ],
-    "postCreateCommand": "apk add --no-cache openssh-client",
+        "source=${localEnv:HOME}/.ssh,target=/root/.ssh,type=bind,consistency=cached"
+    ],
+    "postCreateCommand": "git config --global --add safe.directory \"$ContainerWorkspaceFolder\"",
     "customizations": {
         "vscode": {
             "extensions": [
                 "rust-lang.rust-analyzer"
             ]
         }
+    },
+    "remoteEnv": {
+        "GBDK_PATH": "/usr/share/gbdk",
+        "PICO_SDK_PATH": "/usr/share/pico_sdk"
     }
 }

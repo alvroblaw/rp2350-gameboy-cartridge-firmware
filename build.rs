@@ -26,51 +26,58 @@ fn main() {
     println!("cargo:rustc-link-search={}", out.display());
 
     let work_dir = PathBuf::from(std::env::current_dir().unwrap());
-    let gb_bootloader_dir = work_dir.join("gb-bootloader");
+    let target = std::env::var("TARGET").unwrap_or_default();
 
-    let mut gbdk_lcc = PathBuf::from(std::env::var_os("GBDK_PATH").unwrap());
-    gbdk_lcc.push("bin/lcc");
+    // Only compile GBDK ROMs when building for the embedded target (thumb*).
+    // For host-side builds (tests, check, etc.) skip GBDK entirely —
+    // sdcc/lcc are not needed and may not be available on the host.
+    if target.starts_with("thumb") {
+        let gb_bootloader_dir = work_dir.join("gb-bootloader");
 
-    let lcc_status = Command::new(gbdk_lcc)
-        .args(&[
-            "-Wa-l", "-Wl-m", "-Wl-j", "-Wm-p", "-Wm-yc", "-Wm-yt2", "-Wm-ya1", "-o",
-        ])
-        .arg(out.join("bootloader.gb"))
-        .arg(gb_bootloader_dir.join("bootloader.c"))
-        .arg(gb_bootloader_dir.join("giraffe_4color_data.c"))
-        .arg(gb_bootloader_dir.join("giraffe_4color_map.c"))
-        .status()
-        .expect("failed to execute lcc");
+        let mut gbdk_lcc = PathBuf::from(std::env::var_os("GBDK_PATH").unwrap());
+        gbdk_lcc.push("bin/lcc");
 
-    assert!(lcc_status.success());
+        let lcc_status = Command::new(gbdk_lcc)
+            .args(&[
+                "-Wa-l", "-Wl-m", "-Wl-j", "-Wm-p", "-Wm-yc", "-Wm-yt2", "-Wm-ya1", "-o",
+            ])
+            .arg(out.join("bootloader.gb"))
+            .arg(gb_bootloader_dir.join("bootloader.c"))
+            .arg(gb_bootloader_dir.join("giraffe_4color_data.c"))
+            .arg(gb_bootloader_dir.join("giraffe_4color_map.c"))
+            .status()
+            .expect("failed to execute lcc");
 
-    println!("cargo:rerun-if-changed=gb-bootloader/bootloader.c");
+        assert!(lcc_status.success());
 
-    // ---- GB Wallet ROM (compiled with GBDK, same as bootloader) ----
-    let gb_wallet_dir = work_dir.join("gb-wallet");
+        println!("cargo:rerun-if-changed=gb-bootloader/bootloader.c");
 
-    let wallet_status = Command::new(&gbdk_lcc)
-        .args(&[
-            "-Wa-l", "-Wl-m", "-Wl-j",
-            "-Wm-p", "-Wm-yc",       // MBC5, color-compatible
-            "-Wm-yt2",                 // 2 ROM banks (32 KiB)
-            "-Wm-ya1",                 // 1 RAM bank (8 KiB SRAM)
-            "-o",
-        ])
-        .arg(out.join("wallet.gb"))
-        .arg(gb_wallet_dir.join("main.c"))
-        .arg(gb_wallet_dir.join("font.c"))
-        .arg(gb_wallet_dir.join("sram_comm.c"))
-        .arg(gb_wallet_dir.join("ui.c"))
-        .status()
-        .expect("failed to execute lcc for wallet ROM");
+        // ---- GB Wallet ROM (compiled with GBDK, same as bootloader) ----
+        let gb_wallet_dir = work_dir.join("gb-wallet");
 
-    assert!(wallet_status.success());
+        let wallet_status = Command::new(&gbdk_lcc)
+            .args(&[
+                "-Wa-l", "-Wl-m", "-Wl-j",
+                "-Wm-p", "-Wm-yc",       // MBC5, color-compatible
+                "-Wm-yt2",                 // 2 ROM banks (32 KiB)
+                "-Wm-ya1",                 // 1 RAM bank (8 KiB SRAM)
+                "-o",
+            ])
+            .arg(out.join("wallet.gb"))
+            .arg(gb_wallet_dir.join("main.c"))
+            .arg(gb_wallet_dir.join("font.c"))
+            .arg(gb_wallet_dir.join("sram_comm.c"))
+            .arg(gb_wallet_dir.join("ui.c"))
+            .status()
+            .expect("failed to execute lcc for wallet ROM");
 
-    println!("cargo:rerun-if-changed=gb-wallet/main.c");
-    println!("cargo:rerun-if-changed=gb-wallet/font.c");
-    println!("cargo:rerun-if-changed=gb-wallet/sram_comm.c");
-    println!("cargo:rerun-if-changed=gb-wallet/ui.c");
+        assert!(wallet_status.success());
+
+        println!("cargo:rerun-if-changed=gb-wallet/main.c");
+        println!("cargo:rerun-if-changed=gb-wallet/font.c");
+        println!("cargo:rerun-if-changed=gb-wallet/sram_comm.c");
+        println!("cargo:rerun-if-changed=gb-wallet/ui.c");
+    }
 
     // The file `memory.x` is loaded by cortex-m-rt's `link.x` script, which
     // is what we specify in `.cargo/config.toml` for Arm builds

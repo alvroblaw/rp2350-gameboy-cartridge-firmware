@@ -661,6 +661,10 @@ void scanline_isr(void)
     rBGP = DMG_BKG_NORMAL_PALETTE;
 }
 
+/* ---- Wallet mode trigger ---- */
+#define CMD_SWITCH_TO_WALLET ((uint8_t)(0x57)) /* 'W' — RP2350 interprets as wallet switch */
+#define WALLET_TRIGGER_COMBO (J_START | J_B) /* Start+B held at boot → wallet mode */
+
 void main(void)
 {
     ENABLE_RAM_MBC1;
@@ -709,6 +713,35 @@ void main(void)
     set_bkg_data(102, 70, giraffe_4color_data);
 
     DISPLAY_ON;
+
+    /* ---- Wallet mode detection ---- */
+    /* Wait a few frames for input to stabilize, then check for
+     * the Start+B combo. If held, signal the RP2350 to switch
+     * to wallet mode and halt the bootloader. */
+    {
+        uint8_t frames;
+        for (frames = 0; frames < 30; frames++)
+            vsync(); /* ~0.5 s settle */
+
+        if ((joypad() & WALLET_TRIGGER_COMBO) == WALLET_TRIGGER_COMBO)
+        {
+            /* Confirm: wait for release to avoid accidental trigger */
+            waitpadup();
+
+            /* Show confirmation */
+            cls();
+            gotoxy(0, 7);
+            printf("  Loading Wallet...  ");
+
+            /* Signal RP2350 */
+            memcpy(SMEM_ADDR_GAME_SELECTOR, "__WALLET__", 11);
+            *ADDR_BOOTLOADER_CMD_EXEC = CMD_SWITCH_TO_WALLET;
+
+            /* Wait for RP2350 to process */
+            while (1)
+                vsync();
+        }
+    }
 
     while (1)
     {
